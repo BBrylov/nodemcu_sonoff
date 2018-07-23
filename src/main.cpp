@@ -2,8 +2,8 @@
 #include "ESPWebMQTT.h"
 #include "Events.h"
 #include "Button.h"
-#include "Date.h"
-#include "Schedule.h"
+
+
 #include "RTCmem.h"
 #include "DS1820.h"
 #include "DHT.h"
@@ -35,9 +35,6 @@ const uint8_t MAXS_CLK = 14;
 const char pathRelay[] PROGMEM = "/relay"; // Путь до страницы настройки параметров реле
 const char pathControl[] PROGMEM = "/control"; // Путь до страницы настройки параметров кнопок/ДУ
 const char pathSwitch[] PROGMEM = "/switch"; // Путь до страницы управления переключением реле
-const char pathSchedules[] PROGMEM = "/schedules"; // Путь до страницы настройки параметров расписания
-const char pathGetSchedule[] PROGMEM = "/getschedule"; // Путь до страницы, возвращающей JSON-пакет элемента расписания
-const char pathSetSchedule[] PROGMEM = "/setschedule"; // Путь до страницы изменения элемента расписания
 const char pathClimate[] PROGMEM = "/climate"; // Путь до страницы настройки параметров датчика температуры
 
 // Имена параметров для Web-форм
@@ -116,14 +113,10 @@ protected:
   String jsonData();
   void handleRelayConfig(); // Обработчик страницы настройки параметров реле
   void handleRelaySwitch(); // Обработчик страницы управления переключением реле
-  void handleSchedulesConfig(); // Обработчик страницы настройки параметров расписания
-  void handleGetSchedule(); // Обработчик страницы, возвращающей JSON-пакет элемента расписания
-  void handleSetSchedule(); // Обработчик страницы изменения элемента расписания
   void handleClimateConfig(); // Обработчик страницы настройки параметров датчика температуры
 
   String navigator();
   String btnRelayConfig(); // HTML-код кнопки вызова настройки реле
-  String btnSchedulesConfig(); // HTML-код кнопки вызова настройки расписания
   String btnClimateConfig(); // HTML-код кнопки вызова настройки датчика температуры
 
   void mqttCallback(char* topic, byte* payload, unsigned int length);
@@ -133,10 +126,12 @@ protected:
 
 private:
   void switchRelay(bool on, uint16_t customAutoOff = 0); // Процедура включения/выключения реле
+  void switchRelay(int8_t id, bool on);
   void toggleRelay(); // Процедура переключения реле
+  void toggleRelay(int8_t id);
 
-  uint16_t readSchedulesConfig(uint16_t offset); // Чтение из EEPROM порции параметров расписания
-  uint16_t writeSchedulesConfig(uint16_t offset); // Запись в EEPROM порции параметров расписания
+ // uint16_t readSchedulesConfig(uint16_t offset); // Чтение из EEPROM порции параметров расписания
+  //uint16_t writeSchedulesConfig(uint16_t offset); // Запись в EEPROM порции параметров расписания
 
   void publishTemperature(); // Публикация температуры в MQTT
   void publishHumidity(); // Публикация влажности в MQTT
@@ -155,7 +150,7 @@ private:
 
   enum turn_t : uint8_t { TURN_OFF, TURN_ON, TURN_TOGGLE };
 
-  Schedule schedules[maxSchedules]; // Массив расписания событий
+  
   turn_t scheduleTurns[maxSchedules]; // Что делать с реле по срабатыванию события
 
   enum sensor_t : uint8_t { SENSOR_NONE, SENSOR_MAX6675, SENSOR_DS1820, SENSOR_DHT11, SENSOR_DHT21, SENSOR_DHT22 };
@@ -298,76 +293,8 @@ void ESPWebMQTTRelay::loopExtra() {
     }
   }
 
-  if (now) {
-    for (int8_t i = 0; i < maxSchedules; ++i) {
-      if (schedules[i].period() != Schedule::NONE) {
-        if (schedules[i].check(now)) {
-          if (scheduleTurns[i] == TURN_TOGGLE)
-            toggleRelay();
-          else
-            switchRelay(scheduleTurns[i] == TURN_ON);
-          logDateTime(now);
-          _log->print(F(" schedule \""));
-          _log->print(schedules[i]);
-          _log->print(F("\" turned relay "));
-          if (scheduleTurns[i] == TURN_TOGGLE)
-            _log->println(F("opposite"));
-          else
-            _log->println(scheduleTurns[i] == TURN_ON ? F("on") : F("off"));
-        }
-      }
-    }
-  }
-
   if (climateSensor != SENSOR_NONE) {
-    if (climateSensor == SENSOR_DS1820) {
-      if (ds) {
-        if ((int32_t)millis() >= (int32_t)climateReadTime) {
-          float v;
-    
-          v = ds->readTemperature();
-          ds->update();
-          if (! isnan(v) && (v >= -50.0) && (v <= 120.0)) {
-            if (isnan(climateTemperature) || (abs(climateTemperature - v) > climateTempTolerance)) {
-              climateTemperature = v;
-              publishTemperature();
-              if (! isnan(climateMinTemp)) {
-                if (climateTemperature < climateMinTemp) {
-                  if (! climateMinTempTriggered) {
-                    if (climateMinTempTurn == TURN_TOGGLE)
-                      toggleRelay();
-                    else
-                      switchRelay(climateMinTempTurn == TURN_ON);
-                    logDateTime(now);
-                    _log->println(F(" DS1820 minimal temperature triggered"));
-                    climateMinTempTriggered = true;
-                  }
-                } else
-                  climateMinTempTriggered = false;
-              }
-              if (! isnan(climateMaxTemp)) {
-                if (climateTemperature > climateMaxTemp) {
-                  if (! climateMaxTempTriggered) {
-                    if (climateMaxTempTurn == TURN_TOGGLE)
-                      toggleRelay();
-                    else
-                      switchRelay(climateMaxTempTurn == TURN_ON);
-                    logDateTime(now);
-                    _log->println(F(" DS1820 maximal temperature triggered"));
-                    climateMaxTempTriggered = true;
-                  }
-                } else
-                  climateMaxTempTriggered = false;
-              }
-            }
-          } else {
-            logDateTime(now);
-            _log->println(F(" DS1820 temperature read error!"));
-          }
-          climateReadTime = millis() + ds->MEASURE_TIME;
-        }
-      }
-    } else {
+    {
    if (climateSensor == SENSOR_MAX6675) {
       if (Max6675) {
         if ((int32_t)millis() >= (int32_t)climateReadTime) {
@@ -567,7 +494,7 @@ uint16_t ESPWebMQTTRelay::readConfig() {
     getEEPROM(offset, relay);
     offset += sizeof(relay);
 
-    offset = readSchedulesConfig(offset);
+    //offset = readSchedulesConfig(offset);
 
     sensor_t _climateSensor; // Bit-field workaround
 
@@ -613,7 +540,7 @@ uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
   putEEPROM(offset, relay);
   offset += sizeof(relay);
 
-  offset = writeSchedulesConfig(offset);
+  //offset = writeSchedulesConfig(offset);
 
   sensor_t _climateSensor = climateSensor; // Bit-field workaround
 
@@ -667,10 +594,7 @@ void ESPWebMQTTRelay::defaultConfig(uint8_t level) {
     relay.relayDblClkAutoOff = defRelayDblClkAutoOff;
     memset(relay.relayName, 0, sizeof(relay.relayName));
 
-    for (uint8_t i = 0; i < maxSchedules; ++i) {
-      schedules[i].clear();
-      scheduleTurns[i] = TURN_OFF;
-    }
+
 
     climateSensor = SENSOR_NONE;
     climateTempTolerance = defTemperatureTolerance;
@@ -756,9 +680,6 @@ void ESPWebMQTTRelay::setupHttpServer() {
   httpServer->on(String(FPSTR(pathRelay)).c_str(), std::bind(&ESPWebMQTTRelay::handleRelayConfig, this));
   httpServer->on(String(FPSTR(pathSwitch)).c_str(), std::bind(&ESPWebMQTTRelay::handleRelaySwitch, this));
   httpServer->on(String(FPSTR(pathClimate)).c_str(), std::bind(&ESPWebMQTTRelay::handleClimateConfig, this));
-  httpServer->on(String(FPSTR(pathSchedules)).c_str(), std::bind(&ESPWebMQTTRelay::handleSchedulesConfig, this));
-  httpServer->on(String(FPSTR(pathGetSchedule)).c_str(), std::bind(&ESPWebMQTTRelay::handleGetSchedule, this));
-  httpServer->on(String(FPSTR(pathSetSchedule)).c_str(), std::bind(&ESPWebMQTTRelay::handleSetSchedule, this));
 }
 
 void ESPWebMQTTRelay::handleRootPage() {
@@ -1095,508 +1016,6 @@ void ESPWebMQTTRelay::handleRelaySwitch() {
   httpServer->send(200, FPSTR(textPlain), strEmpty);
 }
 
-void ESPWebMQTTRelay::handleSchedulesConfig() {
-  if (! adminAuthenticate())
-    return;
-
-  int8_t i;
-
-  String style = F(".modal {\n\
-display: none;\n\
-position: fixed;\n\
-z-index: 1;\n\
-left: 0;\n\
-top: 0;\n\
-width: 100%;\n\
-height: 100%;\n\
-overflow: auto;\n\
-background-color: rgb(0,0,0);\n\
-background-color: rgba(0,0,0,0.4);\n\
-}\n\
-.modal-content {\n\
-background-color: #fefefe;\n\
-margin: 15% auto;\n\
-padding: 20px;\n\
-border: 1px solid #888;\n\
-width: 400px;\n\
-}\n\
-.close {\n\
-color: #aaa;\n\
-float: right;\n\
-font-size: 28px;\n\
-font-weight: bold;\n\
-}\n\
-.close:hover,\n\
-.close:focus {\n\
-color: black;\n\
-text-decoration: none;\n\
-cursor: pointer;\n\
-}\n\
-.hidden {\n\
-display: none;\n\
-}\n");
-
-  String script = F("function loadData(form) {\n\
-var request = getXmlHttpRequest();\n\
-request.open('GET', '");
-  script += FPSTR(pathGetSchedule);
-  script += F("?id=' + form.id.value + '&dummy=' + Date.now(), false);\n\
-request.send(null);\n\
-if (request.status == 200) {\n\
-var data = JSON.parse(request.responseText);\n\
-form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value = data.");
-  script += FPSTR(jsonSchedulePeriod);
-  script += F(";\n\
-form.");
-  script += FPSTR(paramScheduleHour);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleHour);
-  script += F(";\n\
-form.");
-  script += FPSTR(paramScheduleMinute);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleMinute);
-  script += F(";\n\
-form.");
-  script += FPSTR(paramScheduleSecond);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleSecond);
-  script += F(";\n\
-if (data.");
-  script += FPSTR(jsonSchedulePeriod);
-  script += F(" == 3) {\n\
-var weekdaysdiv = document.getElementById('weekdays');\n\
-var elements = weekdaysdiv.getElementsByTagName('input');\n\
-for (var i = 0; i < elements.length; i++) {\n\
-if (elements[i].type == 'checkbox') {\n\
-if ((data.");
-  script += FPSTR(jsonScheduleWeekdays);
-  script += F(" & elements[i].value) != 0)\n\
-elements[i].checked = true;\n\
-else\n\
-elements[i].checked = false;\n\
-}\n\
-}\n\
-form.");
-  script += FPSTR(paramScheduleWeekdays);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleWeekdays);
-  script += F(";\n\
-} else {\n\
-form.");
-  script += FPSTR(paramScheduleWeekdays);
-  script += F(".value = 0;\n\
-form.");
-  script += FPSTR(paramScheduleDay);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleDay);
-  script += F(";\n\
-form.");
-  script += FPSTR(paramScheduleMonth);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleMonth);
-  script += F(";\n\
-form.");
-  script += FPSTR(paramScheduleYear);
-  script += F(".value = data.");
-  script += FPSTR(jsonScheduleYear);
-  script += F(";\n\
-}\n\
-var radios = document.getElementsByName('");
-  script += FPSTR(paramScheduleTurn);
-  script += F("');\n\
-for (var i = 0; i < radios.length; i++) {\n\
-if (radios[i].value == data.");
-  script += FPSTR(jsonScheduleTurn);
-  script += F(") radios[i].checked = true;\n\
-}\n\
-}\n\
-}\n\
-function openForm(form, id) {\n\
-form.id.value = id;\n\
-loadData(form);\n\
-form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".onchange();\n\
-document.getElementById(\"form\").style.display = \"block\";\n\
-}\n\
-function closeForm() {\n\
-document.getElementById(\"form\").style.display = \"none\";\n\
-}\n\
-function checkNumber(field, minvalue, maxvalue) {\n\
-var val = parseInt(field.value);\n\
-if (isNaN(val) || (val < minvalue) || (val > maxvalue))\n\
-return false;\n\
-return true;\n\
-}\n\
-function validateForm(form) {\n\
-if (form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value > 0) {\n\
-if ((form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value > 2) && (! checkNumber(form.");
-  script += FPSTR(paramScheduleHour);
-  script += F(", 0, 23))) {\n\
-alert(\"Wrong hour!\");\n\
-form.");
-  script += FPSTR(paramScheduleHour);
-  script += F(".focus();\n\
-return false;\n\
-}\n\
-if ((form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value > 1) && (! checkNumber(form.");
-  script += FPSTR(paramScheduleMinute);
-  script += F(", 0, 59))) {\n\
-alert(\"Wrong minute!\");\n\
-form.");
-  script += FPSTR(paramScheduleMinute);
-  script += F(".focus();\n\
-return false;\n\
-}\n\
-if (! checkNumber(form.");
-  script += FPSTR(paramScheduleSecond);
-  script += F(", 0, 59)) {\n\
-alert(\"Wrong second!\");\n\
-form.");
-  script += FPSTR(paramScheduleSecond);
-  script += F(".focus();\n\
-return false;\n\
-}\n\
-if ((form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value == 3) && (form.");
-  script += FPSTR(paramScheduleWeekdays);
-  script += F(".value == 0)) {\n\
-alert(\"None of weekdays selected!\");\n\
-return false;\n\
-}\n\
-if ((form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value >= 4) && (! checkNumber(form.");
-  script += FPSTR(paramScheduleDay);
-  script += F(", 1, ");
-  script += String(Schedule::LASTDAYOFMONTH);
-  script += F("))) {\n\
-alert(\"Wrong day!\");\n\
-form.");
-  script += FPSTR(paramScheduleDay);
-  script += F(".focus();\n\
-return false;\n\
-}\n\
-if ((form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value >= 5) && (! checkNumber(form.");
-  script += FPSTR(paramScheduleMonth);
-  script += F(", 1, 12))) {\n\
-alert(\"Wrong month!\");\n\
-form.");
-  script += FPSTR(paramScheduleMonth);
-  script += F(".focus();\n\
-return false;\n\
-}\n\
-if ((form.");
-  script += FPSTR(paramSchedulePeriod);
-  script += F(".value == 6) && (! checkNumber(form.");
-  script += FPSTR(paramScheduleYear);
-  script += F(", 2017, 2099))) {\n\
-alert(\"Wrong year!\");\n\
-form.");
-  script += FPSTR(paramScheduleYear);
-  script += F(".focus();\n\
-return false;\n\
-}\n\
-var radios = document.getElementsByName('");
-  script += FPSTR(paramScheduleTurn);
-  script += F("');\n\
-var checkedCount = 0;\n\
-for (var i = 0; i < radios.length; i++) {\n\
-if (radios[i].checked == true) checkedCount++;\n\
-}\n\
-if (checkedCount != 1) {\n\
-alert(\"Wrong relay turn!\");\n\
-return false;\n\
-}\n\
-}\n\
-return true;\n\
-}\n\
-function periodChanged(period) {\n\
-document.getElementById(\"time\").style.display = (period.value != 0) ? \"inline\" : \"none\";\n\
-document.getElementById(\"hh\").style.display = (period.value > 2) ? \"inline\" : \"none\";\n\
-document.getElementById(\"mm\").style.display = (period.value > 1) ? \"inline\" : \"none\";\n\
-document.getElementById(\"weekdays\").style.display = (period.value == 3) ? \"block\" : \"none\";\n\
-document.getElementById(\"date\").style.display = (period.value > 3) ? \"block\" : \"none\";\n\
-document.getElementById(\"month\").style.display = (period.value > 4) ? \"inline\" : \"none\";\n\
-document.getElementById(\"year\").style.display = (period.value == 6) ? \"inline\" : \"none\";\n\
-document.getElementById(\"relay\").style.display = (period.value != 0) ? \"block\" : \"none\";\n\
-}\n\
-function weekChanged(wd) {\n\
-var weekdays = document.form.");
-  script += FPSTR(paramScheduleWeekdays);
-  script += F(".value;\n\
-if (wd.checked == \"\") weekdays &= ~wd.value; else weekdays |= wd.value;\n\
-document.form.");
-  script += FPSTR(paramScheduleWeekdays);
-  script += F(".value = weekdays;\n\
-}\n");
-
-  String page = ESPWebBase::webPageStart(F("Schedules Setup"));
-  page += ESPWebBase::webPageStdStyle();
-  page += ESPWebBase::webPageStyle(style);
-  page += ESPWebBase::webPageStdScript();
-  page += ESPWebBase::webPageScript(script);
-  page += ESPWebBase::webPageBody();
-  page += F("<table><caption><h3>Schedules Setup</h3></caption>\n\
-<tr><th>#</th><th>Event</th><th>Next time</th><th>Relay</th></tr>\n");
-
-  for (i = 0; i < maxSchedules; ++i) {
-    page += F("<tr><td><a href=\"#\" onclick=\"openForm(document.form, ");
-    page += String(i);
-    page += F(")\">");
-    page += String(i + 1);
-    page += F("</a></td><td>");
-    page += schedules[i];
-    page += F("</td><td>");
-    page += schedules[i].nextTimeStr();
-    page += F("</td><td>");
-    if (schedules[i].period() != Schedule::NONE) {
-      page += F("Relay ");
-      if (scheduleTurns[i] == TURN_TOGGLE)
-        page += F("toggle");
-      else
-        page += (scheduleTurns[i] == TURN_ON) ? F("on") : F("off");
-    }
-    page += F("</td></tr>\n");
-  }
-  page += F("</table>\n\
-<p>\n\
-<i>Don't forget to save changes!</i>\n\
-<p>\n");
-
-  page += ESPWebBase::tagInput(FPSTR(typeButton), strEmpty, F("Save"), String(F("onclick=\"location.href='")) + String(FPSTR(pathStore)) + String(F("?reboot=0'\"")));
-  page += charLF;
-  page += btnBack();
-  page += ESPWebBase::tagInput(FPSTR(typeHidden), FPSTR(paramReboot), "0");
-  page += F("\n\
-<div id=\"form\" class=\"modal\">\n\
-<div class=\"modal-content\">\n\
-<span class=\"close\" onclick=\"closeForm()\">&times;</span>\n\
-<form name=\"form\" method=\"GET\" action=\"");
-  page += FPSTR(pathSetSchedule);
-  page += F("\" onsubmit=\"if (validateForm(this)) closeForm(); else return false;\">\n\
-<input type=\"hidden\" name=\"id\" value=\"0\">\n\
-<select name=\"");
-  page += FPSTR(paramSchedulePeriod);
-  page += F("\" size=\"1\" onchange=\"periodChanged(this)\">\n\
-<option value=\"0\">Never!</option>\n\
-<option value=\"1\">Every minute</option>\n\
-<option value=\"2\">Every hour</option>\n\
-<option value=\"3\">Every week</option>\n\
-<option value=\"4\">Every month</option>\n\
-<option value=\"5\">Every year</option>\n\
-<option value=\"6\">Once</option>\n\
-</select>\n\
-<span id=\"time\" class=\"hidden\">at\n\
-<span id=\"hh\" class=\"hidden\">");
-  page += ESPWebBase::tagInput(typeText, FPSTR(paramScheduleHour), "0", F("size=2 maxlength=2"));
-  page += F("\n:</span>\n\
-<span id=\"mm\" class=\"hidden\">");
-  page += ESPWebBase::tagInput(typeText, FPSTR(paramScheduleMinute), "0", F("size=2 maxlength=2"));
-  page += F("\n:</span>\n");
-  page += ESPWebBase::tagInput(typeText, FPSTR(paramScheduleSecond), "0", F("size=2 maxlength=2"));
-  page += F("</span><br/>\n\
-<div id=\"weekdays\" class=\"hidden\">\n\
-<input type=\"hidden\" name=\"");
-  page += FPSTR(paramScheduleWeekdays);
-  page += F("\" value=\"0\">\n");
-
-  for (i = 0; i < 7; i++) {
-    page += F("<input type=\"checkbox\" value=\"");
-    page += String(1 << i);
-    page += F("\" onchange=\"weekChanged(this)\">");
-    page += weekdayName(i);
-    page += charLF;
-  }
-  page += F("</div>\n\
-<div id=\"date\" class=\"hidden\">\n\
-<select name=\"");
-  page += FPSTR(paramScheduleDay);
-  page += F("\" size=\"1\">\n");
-
-  for (i = 1; i <= 31; i++) {
-    page += F("<option value=\"");
-    page += String(i);
-    page += F("\">");
-    page += String(i);
-    page += F("</option>\n");
-  }
-  page += F("<option value=\"");
-  page += String(Schedule::LASTDAYOFMONTH);
-  page += F("\">Last</option>\n\
-</select>\n\
-day\n\
-<span id=\"month\" class=\"hidden\">of\n\
-<select name=\"");
-  page += FPSTR(paramScheduleMonth);
-  page += F("\" size=\"1\">\n");
-
-  for (i = 1; i <= 12; i++) {
-    page += F("<option value=\"");
-    page += String(i);
-    page += F("\">");
-    page += monthName(i);
-    page += F("</option>\n");
-  }
-  page += F("</select>\n\
-</span>\n\
-<span id=\"year\" class=\"hidden\">");
-  page += ESPWebBase::tagInput(typeText, FPSTR(paramScheduleYear), "2017", F("size=4 maxlength=4"));
-  page += F("</span>\n\
-</div>\n\
-<div id=\"relay\" class=\"hidden\">\n\
-<label>Turn relay</label>\n\
-<input type=\"radio\" name=\"");
-  page += FPSTR(paramScheduleTurn);
-  page += F("\" value=\"0\">OFF\n\
-<input type=\"radio\" name=\"");
-  page += FPSTR(paramScheduleTurn);
-  page += F("\" value=\"1\">ON\n\
-<input type=\"radio\" name=\"");
-  page += FPSTR(paramScheduleTurn);
-  page += F("\" value=\"2\">TOGGLE\n\
-</div>\n\
-<p>\n\
-<input type=\"submit\" value=\"Update\">\n\
-</form>\n\
-</div>\n\
-</div>\n");
-  page += ESPWebBase::webPageEnd();
-
-  httpServer->send(200, FPSTR(textHtml), page);
-}
-
-void ESPWebMQTTRelay::handleGetSchedule() {
-  int id = -1;
-
-  if (httpServer->hasArg("id"))
-    id = httpServer->arg("id").toInt();
-
-  if ((id >= 0) && (id < maxSchedules)) {
-    String page;
-
-    page += charOpenBrace;
-    page += charQuote;
-    page += FPSTR(jsonSchedulePeriod);
-    page += F("\":");
-    page += String(schedules[id].period());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleHour);
-    page += F("\":");
-    page += String(schedules[id].hour());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleMinute);
-    page += F("\":");
-    page += String(schedules[id].minute());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleSecond);
-    page += F("\":");
-    page += String(schedules[id].second());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleWeekdays);
-    page += F("\":");
-    page += String(schedules[id].weekdays());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleDay);
-    page += F("\":");
-    page += String(schedules[id].day());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleMonth);
-    page += F("\":");
-    page += String(schedules[id].month());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleYear);
-    page += F("\":");
-    page += String(schedules[id].year());
-    page += F(",\"");
-    page += FPSTR(jsonScheduleTurn);
-    page += F("\":");
-    page += String(scheduleTurns[id]);
-    page += charCloseBrace;
-
-    httpServer->send(200, FPSTR(textJson), page);
-  } else {
-    httpServer->send(204, FPSTR(textJson), strEmpty); // No content
-  }
-}
-
-void ESPWebMQTTRelay::handleSetSchedule() {
-  String argName, argValue;
-  int8_t id = -1;
-  Schedule::period_t period = Schedule::NONE;
-  int8_t hour = -1;
-  int8_t minute = -1;
-  int8_t second = -1;
-  uint8_t weekdays = 0;
-  int8_t day = 0;
-  int8_t month = 0;
-  int16_t year = 0;
-  turn_t turn = TURN_OFF;
-
-  for (byte i = 0; i < httpServer->args(); i++) {
-    argName = httpServer->argName(i);
-    argValue = httpServer->arg(i);
-    if (argName.equals("id")) {
-      id = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramSchedulePeriod))) {
-      period = (Schedule::period_t)argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleHour))) {
-      hour = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleMinute))) {
-      minute = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleSecond))) {
-      second = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleWeekdays))) {
-      weekdays = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleDay))) {
-      day = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleMonth))) {
-      month = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleYear))) {
-      year = argValue.toInt();
-    } else if (argName.equals(FPSTR(paramScheduleTurn))) {
-      turn = (turn_t)argValue.toInt();
-    } else {
-      _log->print(F("Unknown parameter \""));
-      _log->print(argName);
-      _log->print(F("\"!"));
-    }
-  }
-
-  if ((id >= 0) && (id < maxSchedules)) {
-    if (period == Schedule::NONE)
-      schedules[id].clear();
-    else
-      schedules[id].set(period, hour, minute, second, weekdays, day, month, year);
-    scheduleTurns[id] = turn;
-
-    String page = ESPWebBase::webPageStart(F("Store Schedule"));
-    page += F("<meta http-equiv=\"refresh\" content=\"1;URL=");
-    page += FPSTR(pathSchedules);
-    page += F("\">\n");
-    page += ESPWebBase::webPageStdStyle();
-    page += ESPWebBase::webPageBody();
-    page += F("Configuration stored successfully.\n\
-Wait for 1 sec. to return to previous page.\n");
-    page += ESPWebBase::webPageEnd();
-
-    httpServer->send(200, FPSTR(textHtml), page);
-  } else {
-    httpServer->send(204, FPSTR(textHtml), strEmpty);
-  }
-}
 
 void ESPWebMQTTRelay::handleClimateConfig() {
   if (! adminAuthenticate())
@@ -1797,7 +1216,7 @@ String ESPWebMQTTRelay::navigator() {
   result += btnTimeConfig();
   result += btnMQTTConfig();
   result += btnRelayConfig();
-  result += btnSchedulesConfig();
+  //result += btnSchedulesConfig();
   result += btnClimateConfig();
   result += btnLog();
   result += btnReboot();
@@ -1812,12 +1231,6 @@ String ESPWebMQTTRelay::btnRelayConfig() {
   return result;
 }
 
-String ESPWebMQTTRelay::btnSchedulesConfig() {
-  String result = ESPWebBase::tagInput(FPSTR(typeButton), strEmpty, F("Schedules Setup"), String(F("onclick=\"location.href='")) + String(FPSTR(pathSchedules)) + String(F("'\"")));
-  result += charLF;
-
-  return result;
-}
 
 String ESPWebMQTTRelay::btnClimateConfig() {
   String result = ESPWebBase::tagInput(FPSTR(typeButton), strEmpty, F("Climate Setup"), String(F("onclick=\"location.href='")) + String(FPSTR(pathClimate)) + String(F("'\"")));
@@ -1907,100 +1320,6 @@ inline void ESPWebMQTTRelay::toggleRelay() {
   switchRelay(digitalRead(relayPin) != relayLevel);
 }
 
-uint16_t ESPWebMQTTRelay::readSchedulesConfig(uint16_t offset) {
-  if (offset) {
-    Schedule::period_t period;
-    int8_t hour;
-    int8_t minute;
-    int8_t second;
-    uint8_t weekdays;
-    int8_t day;
-    int8_t month;
-    int16_t year;
-
-    for (int8_t i = 0; i < maxSchedules; ++i) {
-      getEEPROM(offset, period);
-      offset += sizeof(period);
-      getEEPROM(offset, hour);
-      offset += sizeof(hour);
-      getEEPROM(offset, minute);
-      offset += sizeof(minute);
-      getEEPROM(offset, second);
-      offset += sizeof(second);
-      if (period == Schedule::WEEKLY) {
-        getEEPROM(offset, weekdays);
-        offset += sizeof(weekdays);
-      } else {
-        getEEPROM(offset, day);
-        offset += sizeof(day);
-        getEEPROM(offset, month);
-        offset += sizeof(month);
-        getEEPROM(offset, year);
-        offset += sizeof(year);
-      }
-      getEEPROM(offset, scheduleTurns[i]);
-      offset += sizeof(scheduleTurns[i]);
-
-      if (period == Schedule::NONE)
-        schedules[i].clear();
-      else
-        schedules[i].set(period, hour, minute, second, weekdays, day, month, year);
-    }
-  }
-
-  return offset;
-}
-
-uint16_t ESPWebMQTTRelay::writeSchedulesConfig(uint16_t offset) {
-  if (offset) {
-    Schedule::period_t period;
-    int8_t hour;
-    int8_t minute;
-    int8_t second;
-    uint8_t weekdays;
-    int8_t day;
-    int8_t month;
-    int16_t year;
-
-    for (int8_t i = 0; i < maxSchedules; ++i) {
-      period = schedules[i].period();
-      hour = schedules[i].hour();
-      minute = schedules[i].minute();
-      second = schedules[i].second();
-      if (period == Schedule::WEEKLY) {
-        weekdays = schedules[i].weekdays();
-      } else {
-        day = schedules[i].day();
-        month = schedules[i].month();
-        year = schedules[i].year();
-      }
-
-      putEEPROM(offset, period);
-      offset += sizeof(period);
-      putEEPROM(offset, hour);
-      offset += sizeof(hour);
-      putEEPROM(offset, minute);
-      offset += sizeof(minute);
-      putEEPROM(offset, second);
-      offset += sizeof(second);
-      if (period == Schedule::WEEKLY) {
-        putEEPROM(offset, weekdays);
-        offset += sizeof(weekdays);
-      } else {
-        putEEPROM(offset, day);
-        offset += sizeof(day);
-        putEEPROM(offset, month);
-        offset += sizeof(month);
-        putEEPROM(offset, year);
-        offset += sizeof(year);
-      }
-      putEEPROM(offset, scheduleTurns[i]);
-      offset += sizeof(scheduleTurns[i]);
-    }
-  }
-
-  return offset;
-}
 
 void ESPWebMQTTRelay::publishTemperature() {
   if (pubSubClient->connected()) {
