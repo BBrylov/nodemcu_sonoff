@@ -1,8 +1,8 @@
 #define USEIRREMOTE // Закомментируйте это макроопределение, если не нужна поддержка ИК-пульта
-#define USEDHT // Закомментируйте это макроопределение, если не нужна поддержка датчиков DHTxx
-#define USEDS1820 // Закомментируйте это макроопределение, если не нужна поддержка датчиков DS18x20
+//#define USEDHT // Закомментируйте это макроопределение, если не нужна поддержка датчиков DHTxx
+//#define USEDS1820 // Закомментируйте это макроопределение, если не нужна поддержка датчиков DS18x20
 #define USEMAX6675 // Закомментируйте это макроопределение, если не нужна поддержка датчиков DS18x20
-#define USELDR // Закомментируйте это макроопределение, если не нужна поддержка датчика освещенности
+//#define USELDR // Закомментируйте это макроопределение, если не нужна поддержка датчика освещенности
 
 #include <pgmspace.h>
 #ifdef USEIRREMOTE
@@ -65,6 +65,7 @@ const int8_t defDSPin = -1; // Пин, к которому подключен д
 const uint8_t MAX_MISO = 12;//по умолчанию (-1 - не подключено)
 const uint8_t  MAX_CS = 15;
 const uint8_t MAXS_CLK = 14;
+const int8_t defMAXPin = -1; // Пин, к которому подключен датчик DS1820 по умолчанию (-1 - не подключено)
 #endif
 
 const char pathIndexCss[] PROGMEM = "/index.css";
@@ -78,7 +79,7 @@ const char pathSetSchedule[] PROGMEM = "/setschedule"; // Путь до стра
 #ifdef USEIRREMOTE
 const char pathIRData[] PROGMEM = "/irdata"; // Путь до страницы, возвращающей JSON-пакет данных о последней нажатой кнопке пульта ДУ
 #endif
-#if defined(USEDHT) || defined(USEDS1820)|| defined(USEMAX6675)
+#if defined(USEDHT) || defined(USEDS1820) || defined(USEMAX6675)
 const char pathClimate[] PROGMEM = "/climate"; // Путь до страницы настройки параметров датчиков температуры
 #endif
 #ifdef USELDR
@@ -140,6 +141,14 @@ const char paramMAXMinTempRelay[] PROGMEM = "maxmintemprelay";
 const char paramMAXMaxTempRelay[] PROGMEM = "maxmaxtemprelay";
 const char paramMAXMinTempTurn[] PROGMEM = "maxmintempturn";
 const char paramMAXMaxTempTurn[] PROGMEM = "maxmaxtempturn";
+const char paramMAX_Ala_GPIO[] PROGMEM = "maxalagpio";
+const char paramMAX_Ala_MinTemp[] PROGMEM = "maxalamintemp";
+const char paramMAX_Ala_MaxTemp[] PROGMEM = "maxalamaxtemp";
+const char paramMAX_Ala_MinTempRelay[] PROGMEM = "maxalamintemprelay";
+const char paramMAX_Ala_MaxTempRelay[] PROGMEM = "maxalamaxtemprelay";
+const char paramMAX_Ala_MinTempTurn[] PROGMEM = "maxalamintempturn";
+const char paramMAX_Ala_MaxTempTurn[] PROGMEM = "maxalamaxtempturn";
+
 #endif
 
 
@@ -239,7 +248,7 @@ protected:
   void handleScheduleConfig(); // Обработчик страницы настройки параметров расписания
   void handleGetSchedule(); // Обработчик страницы, возвращающей JSON-пакет элемента расписания
   void handleSetSchedule(); // Обработчик страницы изменения элемента расписания
-#if defined(USEDHT) || defined(USEDS1820)|| defined(USEMAX6675)
+#if defined(USEDHT) || defined(USEDS1820) || defined(USEMAX6675)
   void handleClimateConfig(); // Обработчик страницы настройки параметров датчиков температуры
 #endif
 #ifdef USELDR
@@ -301,7 +310,7 @@ private:
   } relays[maxRelays];
   uint32_t autoRelease[maxRelays]; // Значения в миллисекундах для сравнения с millis(), когда реле должно отключиться автоматически (0 - нет автоотключения)
   uint32_t lastStates; // Битовое поле состояния реле для воостановления после перезагрузки
-
+  uint32_t now;
   Schedule schedule[maxSchedules]; // Массив расписания событий
   uint8_t scheduleRelay[maxSchedules]; // Какой канал реле и что с ним делать по срабатыванию события (6 младших бит - номер канала реле, 2 старших бита - вкл/выкл/перекл)
 
@@ -351,6 +360,11 @@ private:
   float maxMinTemp, maxMaxTemp; // Минимальное и максимальное значение температуры срабатывания реле
   uint8_t maxMinTempRelay, maxMaxTempRelay; // Какой канал реле и что с ним делать по срабатыванию события (6 младших бит - номер канала реле, 2 старших бита - вкл/выкл/перекл)
   bool maxMinTempTriggered, maxMaxTempTriggered; // Было ли срабатывание реле по порогу температуры?
+ 
+
+  float maxAlaMinTemp, maxAlaMaxTemp; // Минимальное и максимальное значение температуры срабатывания реле
+  uint8_t maxAlaMinTempRelay, maxAlaMaxTempRelay; // Какой канал реле и что с ним делать по срабатыванию события (6 младших бит - номер канала реле, 2 старших бита - вкл/выкл/перекл)
+  bool maxAlaMinTempTriggered, maxAlaMaxTempTriggered; // Было ли срабатывание реле по порогу температуры?
 
   
   MAX6675* Max6675;
@@ -453,6 +467,9 @@ void ESPWebMQTTRelay::setupExtra() {
   maxTemperature = NAN;
   maxMinTempTriggered = false;
   maxMaxTempTriggered = false;
+  maxAlaMinTempTriggered = false;
+  maxAlaMaxTempTriggered = false;
+
 #endif
 
 
@@ -496,7 +513,7 @@ void ESPWebMQTTRelay::loopExtra() {
     }
   }
 
-  uint32_t now = getTime();
+  now = getTime();
   if (now) {
     for (int8_t i = 0; i < maxSchedules; i++) {
       if ((schedule[i].period() != Schedule::NONE) && ((scheduleRelay[i] & 0x3F) < maxRelays)) {
@@ -528,6 +545,7 @@ void ESPWebMQTTRelay::loopExtra() {
       if (results.value != 0xFFFFFFFF) // repeat
         lastIRValue = results.value;
       if (results.decode_type == irType) {
+        _log->print(dateTimeToStr(now));
         _log->print("IR value 0x");
         _log->println((uint32_t)results.value, HEX);
         for (int8_t i = 0; i < maxRelays; i++) {
@@ -576,6 +594,7 @@ void ESPWebMQTTRelay::loopExtra() {
                   toggleRelay(dhtMinTempRelay & 0x3F);
                 else
                   switchRelay(dhtMinTempRelay & 0x3F, (dhtMinTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));
                 _log->println(F("DHT minimal temperature triggered"));
                 dhtMinTempTriggered = true;
               }
@@ -589,6 +608,7 @@ void ESPWebMQTTRelay::loopExtra() {
                   toggleRelay(dhtMaxTempRelay & 0x3F);
                 else
                   switchRelay(dhtMaxTempRelay & 0x3F, (dhtMaxTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));
                 _log->println(F("DHT maximal temperature triggered"));
                 dhtMaxTempTriggered = true;
               }
@@ -631,6 +651,7 @@ void ESPWebMQTTRelay::loopExtra() {
                   toggleRelay(dsMinTempRelay & 0x3F);
                 else
                   switchRelay(dsMinTempRelay & 0x3F, (dsMinTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));  
                 _log->println(F("DS1820 minimal temperature triggered"));
                 dsMinTempTriggered = true;
               }
@@ -644,6 +665,7 @@ void ESPWebMQTTRelay::loopExtra() {
                   toggleRelay(dsMaxTempRelay & 0x3F);
                 else
                   switchRelay(dsMaxTempRelay & 0x3F, (dsMaxTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));  
                 _log->println(F("DS1820 maximal temperature triggered"));
                 dsMaxTempTriggered = true;
               }
@@ -676,6 +698,7 @@ void ESPWebMQTTRelay::loopExtra() {
                   toggleRelay(maxMinTempRelay & 0x3F);
                 else
                   switchRelay(maxMinTempRelay & 0x3F, (maxMinTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));
                 _log->println(F("Max6675 minimal temperature triggered"));
                 maxMinTempTriggered = true;
               }
@@ -689,12 +712,46 @@ void ESPWebMQTTRelay::loopExtra() {
                   toggleRelay(maxMaxTempRelay & 0x3F);
                 else
                   switchRelay(maxMaxTempRelay & 0x3F, (maxMaxTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));
                 _log->println(F("Max6675 maximal temperature triggered"));
                 maxMaxTempTriggered = true;
               }
             } else
               maxMaxTempTriggered = false;
           }
+//Alarm
+          
+          if (! isnan(maxAlaMinTemp)) {
+            if (maxTemperature < maxAlaMinTemp) {
+              if (! maxAlaMinTempTriggered) {
+                if ((maxAlaMinTempRelay & 0x80) != 0) // toggle bit is set
+                  toggleRelay(maxAlaMinTempRelay & 0x3F);
+                else
+                  switchRelay(maxAlaMinTempRelay & 0x3F, (maxAlaMinTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));
+                _log->println(F("Max6675  Alarm minimal temperature triggered"));
+                maxAlaMinTempTriggered = true;
+              }
+            } else
+              maxAlaMinTempTriggered = false;
+          }
+          if (! isnan(maxAlaMaxTemp)) {
+            if (maxTemperature > maxAlaMaxTemp) {
+              if (! maxAlaMaxTempTriggered) {
+                if ((maxAlaMaxTempRelay & 0x80) != 0) // toggle bit is set
+                  toggleRelay(maxAlaMaxTempRelay & 0x3F);
+                else
+                  switchRelay(maxAlaMaxTempRelay & 0x3F, (maxAlaMaxTempRelay >> 6) & 0x01);
+                _log->print(dateTimeToStr(now));  
+                _log->println(F("Max6675 maximal temperature triggered"));
+                maxAlaMaxTempTriggered = true;
+              }
+            } else
+              maxAlaMaxTempTriggered = false;
+          }  
+//end Alarm
+
+
         }
       } else {
         _log->println(F("Max6675 temperature read error!"));
@@ -723,6 +780,7 @@ void ESPWebMQTTRelay::loopExtra() {
                 toggleRelay(ldrMinBrightRelay & 0x3F);
               else
                 switchRelay(ldrMinBrightRelay & 0x3F, (ldrMinBrightRelay >> 6) & 0x01);
+              _log->print(dateTimeToStr(now));  
               _log->println(F("LDR minimal brightness triggered"));
               ldrMinBrightTriggered = true;
             }
@@ -736,6 +794,7 @@ void ESPWebMQTTRelay::loopExtra() {
                 toggleRelay(ldrMaxBrightRelay & 0x3F);
               else
                 switchRelay(ldrMaxBrightRelay & 0x3F, (ldrMaxBrightRelay >> 6) & 0x01);
+              _log->print(dateTimeToStr(now));
               _log->println(F("LDR maximal brightness triggered"));
               ldrMaxBrightTriggered = true;
             }
@@ -762,9 +821,11 @@ uint16_t ESPWebMQTTRelay::readRTCmemory() {
     RTCmem.get(offset, controlStates);
     offset += sizeof(controlStates);
     if (controlStates != ~lastStates) {
+      _log->print(dateTimeToStr(now));
       _log->println(F("Last relay states in RTC memory is illegal!"));
       lastStates = (uint32_t)-1;
     } else {
+      _log->print(dateTimeToStr(now));
       _log->println(F("Last relay states restored from RTC memory"));
     }
   } else
@@ -784,6 +845,7 @@ uint16_t ESPWebMQTTRelay::writeRTCmemory() {
     offset += sizeof(lastStates);
     RTCmem.put(offset, controlStates);
     offset += sizeof(controlStates);
+    _log->print(dateTimeToStr(now));
     _log->println(F("Last relay states stored to RTC memory"));
   }
 
@@ -857,6 +919,15 @@ uint16_t ESPWebMQTTRelay::readConfig() {
     offset += sizeof(maxMinTempRelay);
     getEEPROM(offset, maxMaxTempRelay);
     offset += sizeof(maxMaxTempRelay);
+    getEEPROM(offset, maxAlaMinTemp);
+    offset += sizeof(maxAlaMinTemp);
+    getEEPROM(offset, maxAlaMaxTemp);
+    offset += sizeof(maxAlaMaxTemp);
+    getEEPROM(offset, maxAlaMinTempRelay);
+    offset += sizeof(maxAlaMinTempRelay);
+    getEEPROM(offset, maxAlaMaxTempRelay);
+    offset += sizeof(maxAlaMaxTempRelay);
+    
 #endif
 
 #ifdef USELDR
@@ -945,6 +1016,15 @@ uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
   offset += sizeof(maxMinTempRelay);
   putEEPROM(offset, maxMaxTempRelay);
   offset += sizeof(maxMaxTempRelay);
+  putEEPROM(offset, maxAlaMinTemp);
+  offset += sizeof(maxAlaMinTemp);
+  putEEPROM(offset, maxAlaMaxTemp);
+  offset += sizeof(maxAlaMaxTemp);
+  putEEPROM(offset, maxAlaMinTempRelay);
+  offset += sizeof(maxAlaMinTempRelay);
+  putEEPROM(offset, maxAlaMaxTempRelay);
+  offset += sizeof(maxAlaMaxTempRelay);
+
 #endif
 
 #ifdef USELDR
@@ -1031,11 +1111,16 @@ void ESPWebMQTTRelay::defaultConfig(uint8_t level) {
 #endif
 
 #ifdef USEMAX6675
-    maxusePins = defDSPin;
+    maxusePins = defMAXPin;
     maxMinTemp = NAN;
     maxMaxTemp = NAN;
     maxMinTempRelay = 0;
     maxMaxTempRelay = 0;
+    maxAlaMinTemp = NAN;
+    maxAlaMaxTemp = NAN;
+    maxAlaMinTempRelay = 0;
+    maxAlaMaxTempRelay = 0;
+
 #endif
 
 
@@ -1180,6 +1265,35 @@ bool ESPWebMQTTRelay::setConfigParam(const String& name, const String& value) {
         maxMaxTempRelay &= 0B00111111;
         maxMaxTempRelay |= ((value.toInt() & 0x03) << 6);
       } else
+//Alarm
+      if (name.equals(FPSTR(paramMAXGPIO)))
+        maxusePins = constrain(value.toInt(), -1, 16);
+      else if (name.equals(FPSTR(paramMAX_Ala_MinTemp))) {
+        if (value.length())
+          maxAlaMinTemp = value.toFloat();
+        else
+          maxAlaMinTemp = NAN;
+      } else if (name.equals(FPSTR(paramMAX_Ala_MaxTemp))) {
+        if (value.length())
+          maxAlaMaxTemp = value.toFloat();
+        else
+          maxAlaMaxTemp = NAN;
+      } else if (name.equals(FPSTR(paramMAX_Ala_MinTempRelay))) {
+        maxAlaMinTempRelay &= 0B11000000;
+        maxAlaMinTempRelay |= (value.toInt() & 0B00111111);
+      } else if (name.equals(FPSTR(paramMAX_Ala_MaxTempRelay))) {
+        maxAlaMaxTempRelay &= 0B11000000;
+        maxAlaMaxTempRelay |= (value.toInt() & 0B00111111);
+      } else if (name.equals(FPSTR(paramMAX_Ala_MinTempTurn))) {
+        maxAlaMinTempRelay &= 0B00111111;
+        maxAlaMinTempRelay |= ((value.toInt() & 0x03) << 6);
+      } else if (name.equals(FPSTR(paramMAX_Ala_MaxTempTurn))) {
+        maxAlaMaxTempRelay &= 0B00111111;
+        maxAlaMaxTempRelay |= ((value.toInt() & 0x03) << 6);
+      } else
+
+
+
 #endif
 
 
@@ -1225,7 +1339,7 @@ void ESPWebMQTTRelay::setupHttpServer() {
   httpServer->on(String(FPSTR(pathRelay)).c_str(), std::bind(&ESPWebMQTTRelay::handleRelayConfig, this));
   httpServer->on(String(FPSTR(pathControl)).c_str(), std::bind(&ESPWebMQTTRelay::handleControlConfig, this));
   httpServer->on(String(FPSTR(pathSwitch)).c_str(), std::bind(&ESPWebMQTTRelay::handleRelaySwitch, this));
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820) || defined(USEMAX6675)
   httpServer->on(String(FPSTR(pathClimate)).c_str(), std::bind(&ESPWebMQTTRelay::handleClimateConfig, this));
 #endif
 #ifdef USELDR
@@ -2382,7 +2496,7 @@ Wait for 1 sec. to return to previous page.\n");
   }
 }
 
-#if defined(USEDHT) || defined(USEDS1820)|| defined(MAX6675)
+#if defined(USEDHT) || defined(USEDS1820) || defined(USEMAX6675)
 void ESPWebMQTTRelay::handleClimateConfig() {
 #ifdef USEDHT
   static const char dhtTypes[][6] PROGMEM = { "DHT11", "DHT21", "DHT22" };
@@ -2750,6 +2864,102 @@ turn\n\
     page += F(" checked");
   page += F(">TOGGLE\n\
 </br>\n");
+//Alarm
+  page += F("<br/>\n\
+<label>Minimal Alarm temperature:</label></br>\n\
+<input type=\"text\" name=\"");
+  page += FPSTR(paramMAX_Ala_MinTemp);
+  page += F("\" value=\"");
+
+  if (! isnan(maxAlaMinTemp))
+    page += String(maxAlaMinTemp);
+  page += F("\" size=10 maxlength=10>\n\
+(leave blank if not used)</br>\n\
+<label>Relay #</label>\n\
+<select name=\"");
+  page += FPSTR(paramMAX_Ala_MinTempRelay);
+  page += F("\" size=\"1\">\n");
+
+  for (byte i = 0; i < maxRelays; ++i) {
+    page += F("<option value=\"");
+    page += String(i);
+    page += charQuote;
+    if ((maxAlaMinTempRelay & 0B00111111) == i)
+      page += F(" selected");
+    page += charGreater;
+    page += String(i + 1);
+    page += F("</option>\n");
+  }
+  page += F("</select>\n\
+turn\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAX_Ala_MinTempTurn);
+  page += F("\" value=\"1\"");
+  if ((maxAlaMinTempRelay & 0B11000000) == 0B01000000)
+    page += F(" checked");
+  page += F(">ON\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAX_Ala_MinTempTurn);
+  page += F("\" value=\"0\"");
+  if ((maxAlaMinTempRelay & 0B11000000) == 0B00000000)
+    page += F(" checked");
+  page += F(">OFF\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAX_Ala_MinTempTurn);
+  page += F("\" value=\"2\"");
+  if ((maxAlaMinTempRelay & 0B11000000) == 0B10000000)
+    page += F(" checked");
+  page += F(">TOGGLE\n\
+</br>\n\
+<label>Maximal Alarm temperature:</label></br>\n\
+<input type=\"text\" name=\"");
+  page += FPSTR(paramMAX_Ala_MaxTemp);
+  page += F("\" value=\"");
+
+  if (! isnan(maxAlaMaxTemp))
+    page += String(maxAlaMaxTemp);
+  page += F("\" size=10 maxlength=10>\n\
+(leave blank if not used)</br>\n\
+<label>Relay #</label>\n\
+<select name=\"");
+  page += FPSTR(paramMAX_Ala_MaxTempRelay);
+  page += F("\" size=\"1\">\n");
+
+  for (byte i = 0; i < maxRelays; ++i) {
+    page += F("<option value=\"");
+    page += String(i);
+    page += charQuote;
+    if ((maxAlaMaxTempRelay & 0B00111111) == i)
+      page += F(" selected");
+    page += charGreater;
+    page += String(i + 1);
+    page += F("</option>\n");
+  }
+  page += F("</select>\n\
+turn\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAX_Ala_MaxTempTurn);
+  page += F("\" value=\"1\"");
+  if ((maxAlaMaxTempRelay & 0B11000000) == 0B01000000)
+    page += F(" checked");
+  page += F(">ON\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAX_Ala_MaxTempTurn);
+  page += F("\" value=\"0\"");
+  if ((maxAlaMaxTempRelay & 0B11000000) == 0B00000000)
+    page += F(" checked");
+  page += F(">OFF\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAX_Ala_MaxTempTurn);
+  page += F("\" value=\"2\"");
+  if ((maxAlaMaxTempRelay & 0B11000000) == 0B10000000)
+    page += F(" checked");
+  page += F(">TOGGLE\n\
+</br>\n");
+
+
+
+
 #endif
 
 
@@ -2888,7 +3098,7 @@ String ESPWebMQTTRelay::navigator() {
   result += btnRelayConfig();
   result += btnControlConfig();
   result += btnScheduleConfig();
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820) || defined(USEMAX6675)
   result += btnClimateConfig();
 #endif
 #ifdef USELDR
