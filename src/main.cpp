@@ -10,19 +10,20 @@
 #include "max6675.h"
 
 
-const int8_t maxSchedules = 10; // Количество элементов расписания
+//const int8_t maxSchedules = 10; // Количество элементов расписания
 
 const char overSSID[] PROGMEM = "SONOFF_"; // Префикс имени точки доступа по умолчанию
 const char overMQTTClient[] PROGMEM = "SONOFF_"; // Префикс имени MQTT-клиента по умолчанию
 
-const uint8_t relayPin = 5;
+const uint8_t relayPin[2] = {1,2};
+//const uint8_t relayPin2 = 2;
 const bool relayLevel = HIGH; // Уровень срабатывания реле
 
 const bool defRelayOnBoot = false; // Состояние реле при старте модуля по умолчанию
 const uint16_t defRelayAutoOff = 0; // Время в секундах до автоотключения реле по умолчанию (0 - нет автоотключения)
 const uint16_t defRelayDblClkAutoOff = 60; // Время в секундах до автоотключения реле при двойном нажатии на кнопку по умолчанию
 const float defTemperatureTolerance = 0.2; // Порог изменения температуры
-const float defHumidityTolerance = 1.0; // Порог изменения влажности
+const float defAlarmTolerance = 1.0; // Порог изменения влажности
 
 const uint8_t climatePin = 1; // Пин, к которому подключен датчик температуры/влажности
 
@@ -54,15 +55,15 @@ const char paramScheduleRelay[] PROGMEM = "relay";
 const char paramScheduleTurn[] PROGMEM = "turn";
 const char paramClimateSensor[] PROGMEM = "climatsensor";
 const char paramClimateTempTolerance[] PROGMEM = "climatetemptolerance";
-const char paramClimateHumTolerance[] PROGMEM = "climatehumtolerance";
+const char paramClimateAlaTolerance[] PROGMEM = "climatehumtolerance";
 const char paramClimateMinTemp[] PROGMEM = "climatemintemp";
 const char paramClimateMaxTemp[] PROGMEM = "climatemaxtemp";
 const char paramClimateMinTempTurn[] PROGMEM = "climatemintempturn";
 const char paramClimateMaxTempTurn[] PROGMEM = "climatemaxtempturn";
-const char paramClimateMinHum[] PROGMEM = "climateminhum";
-const char paramClimateMaxHum[] PROGMEM = "climatemaxhum";
-const char paramClimateMinHumTurn[] PROGMEM = "climateminhumturn";
-const char paramClimateMaxHumTurn[] PROGMEM = "climatemaxhumturn";
+const char paramClimateMinAla[] PROGMEM = "climateminhum";
+const char paramClimateMaxAla[] PROGMEM = "climatemaxhum";
+const char paramClimateMinAlaTurn[] PROGMEM = "climateminhumturn";
+const char paramClimateMaxAlaTurn[] PROGMEM = "climatemaxhumturn";
 
 // Имена JSON-переменных
 const char jsonRelay[] PROGMEM = "relay";
@@ -78,12 +79,12 @@ const char jsonScheduleYear[] PROGMEM = "year";
 const char jsonScheduleRelay[] PROGMEM = "relay";
 const char jsonScheduleTurn[] PROGMEM = "turn";
 const char jsonTemperature[] PROGMEM = "temperature";
-const char jsonHumidity[] PROGMEM = "humidity";
+const char jsonHumidity[] PROGMEM = "Alarm";
 
 // Названия топиков для MQTT
 const char mqttRelayTopic[] PROGMEM = "/Relay";
 const char mqttTemperatureTopic[] PROGMEM = "/Temperature";
-const char mqttHumidityTopic[] PROGMEM = "/Humidity";
+const char mqttAlarmTopic[] PROGMEM = "/Alarm";
 
 const char strNone[] PROGMEM = "(None)";
 
@@ -126,24 +127,24 @@ protected:
 
 private:
   void switchRelay(bool on, uint16_t customAutoOff = 0); // Процедура включения/выключения реле
-  void switchRelay(int8_t id, bool on);
-  void toggleRelay(); // Процедура переключения реле
-  void toggleRelay(int8_t id);
+  void switchRelay(int8_t port, bool on);
+    void toggleRelay(int8_t port);// Процедура переключения реле
 
  // uint16_t readSchedulesConfig(uint16_t offset); // Чтение из EEPROM порции параметров расписания
   //uint16_t writeSchedulesConfig(uint16_t offset); // Запись в EEPROM порции параметров расписания
 
   void publishTemperature(); // Публикация температуры в MQTT
-  void publishHumidity(); // Публикация влажности в MQTT
+  void publishAlarm(); // Публикация влажности в MQTT
 
   struct relay_t {
     bool relayOnBoot; // Состояние реле при старте модуля
     uint16_t relayAutoOff; // Значения задержки реле в секундах до автоотключения (0 - нет автоотключения)
     uint16_t relayDblClkAutoOff; // Значения задержки реле в секундах до автоотключения при двойном нажатии на кнопку
     char relayName[RELAY_NAME_SIZE]; // Название реле
-  } relay;
   uint32_t autoOff; // Значения в миллисекундах для сравнения с millis(), когда реле должно отключиться автоматически (0 - нет автоотключения)
   uint32_t lastState; // Битовое поле состояния реле для воостановления после перезагрузки
+
+  } relay[2];
 
   Events *events;
   Button *button;
@@ -151,19 +152,19 @@ private:
   enum turn_t : uint8_t { TURN_OFF, TURN_ON, TURN_TOGGLE };
 
   
-  turn_t scheduleTurns[maxSchedules]; // Что делать с реле по срабатыванию события
+  //turn_t scheduleTurns[maxSchedules]; // Что делать с реле по срабатыванию события
 
   enum sensor_t : uint8_t { SENSOR_NONE, SENSOR_MAX6675, SENSOR_DS1820, SENSOR_DHT11, SENSOR_DHT21, SENSOR_DHT22 };
 
   uint32_t climateReadTime; // Время в миллисекундах, после которого можно считывать новое значение сенсоров
   float climateTempTolerance; // Порог изменения температуры
-  float climateHumTolerance; // Порог изменения влажности
+  float climateAlaTolerance; // Порог изменения влажности
   float climateTemperature; // Значение успешно прочитанной температуры
-  float climateHumidity; // Значение успешно прочитанной влажности
+  float climateAlarm; // Значение успешно прочитанной влажности
   float climateMinTemp, climateMaxTemp; // Минимальное и максимальное значение температуры срабатывания реле
   turn_t climateMinTempTurn, climateMaxTempTurn; // Что делать с реле по срабатыванию события
-  float climateMinHum, climateMaxHum; // Минимальное и максимальное значение влажности срабатывания реле
-  turn_t climateMinHumTurn, climateMaxHumTurn; // Что делать с реле по срабатыванию события
+  float climateMinAla, climateMaxAla; // Минимальное и максимальное значение влажности срабатывания реле
+  turn_t climateMinAlaTurn, climateMaxAlaTurn; // Что делать с реле по срабатыванию события
   struct {
     sensor_t climateSensor : 3;
     bool climateMinTempTriggered : 1;
@@ -202,20 +203,21 @@ void ESPWebMQTTRelay::reboot() {
 
 void ESPWebMQTTRelay::setupExtra() {
   ESPWebMQTTBase::setupExtra();
+for (uint8_t i=0;i<2;i++)
+{
+  relay[i].autoOff = 0;
 
-  autoOff = 0;
-
-  if (lastState != (uint32_t)-1) {
-    if (lastState & 0x01) {
-      digitalWrite(relayPin, relayLevel);
-      if (relay.relayAutoOff)
-        autoOff = millis() + relay.relayAutoOff * 1000;
+  if (relay[i].lastState != (uint32_t)-1) {
+    if (relay[i].lastState & 0x01) {
+      digitalWrite(relayPin[i], relayLevel);
+      if (relay[i].relayAutoOff)
+        relay[i].autoOff = millis() + relay[i].relayAutoOff * 1000;
     } else
-      digitalWrite(relayPin, ! relayLevel);
+      digitalWrite(relayPin[i], ! relayLevel);
   } else
-    digitalWrite(relayPin, relay.relayOnBoot == relayLevel);
-  pinMode(relayPin, OUTPUT);
-
+    digitalWrite(relayPin[i], relay[i].relayOnBoot == relayLevel);
+  pinMode(relayPin[i], OUTPUT);
+}
   events = new Events();
   button = new Button(events);
   button->start();
@@ -258,31 +260,32 @@ void ESPWebMQTTRelay::setupExtra() {
   climateTemperature = NAN;
   climateMinTempTriggered = false;
   climateMaxTempTriggered = false;
-  climateHumidity = NAN;
+  climateAlarm = NAN;
   climateMinHumTriggered = false;
   climateMaxHumTriggered = false;
 }
 
 void ESPWebMQTTRelay::loopExtra() {
   ESPWebMQTTBase::loopExtra();
-
-  if (autoOff && ((int32_t)millis() >= (int32_t)autoOff)) {
-    switchRelay(false);
-    autoOff = 0;
+for( uint8_t i=0;i<2;i++)
+{
+  if (relay[i].autoOff && ((int32_t)millis() >= (int32_t)relay[i].autoOff)) {
+    switchRelay(relayPin[i], false);
+    relay[i].autoOff = 0;
   }
-
+}
   uint32_t now = getTime();
 
-  while (Events::event_t *evt = events->getEvent()) {
+ /* while (Events::event_t *evt = events->getEvent()) {
     if (evt->type == Events::EVT_BTNCLICK) {
-      toggleRelay();
+      toggleRelay(relayPin[1]);
       logDateTime(now);
       _log->println(F(" button pressed"));
     } else if (evt->type == Events::EVT_BTNDBLCLICK) {
-      if (relay.relayDblClkAutoOff)
-        switchRelay(true, relay.relayDblClkAutoOff);
+      if (relay[1].relayDblClkAutoOff)
+        switchRelay(true, relay[1].relayDblClkAutoOff);
       else
-        toggleRelay();
+        toggleRelay(relayPin[1]);
       logDateTime(now);
       _log->println(F(" button double pressed"));
     } else if (evt->type == Events::EVT_BTNLONGPRESSED) {
@@ -291,7 +294,7 @@ void ESPWebMQTTRelay::loopExtra() {
       clearEEPROM();
       reboot();
     }
-  }
+  }*/
 
   if (climateSensor != SENSOR_NONE) {
     {
@@ -310,9 +313,9 @@ void ESPWebMQTTRelay::loopExtra() {
                 if (climateTemperature < climateMinTemp) {
                   if (! climateMinTempTriggered) {
                     if (climateMinTempTurn == TURN_TOGGLE)
-                      toggleRelay();
+                      toggleRelay(relayPin[0]);
                     else
-                      switchRelay(climateMinTempTurn == TURN_ON);
+                      switchRelay(relayPin[0], climateMinTempTurn == TURN_ON);
                     logDateTime(now);
                     _log->println(F(" Max6675 minimal temperature triggered"));
                     climateMinTempTriggered = true;
@@ -324,7 +327,7 @@ void ESPWebMQTTRelay::loopExtra() {
                 if (climateTemperature > climateMaxTemp) {
                   if (! climateMaxTempTriggered) {
                     if (climateMaxTempTurn == TURN_TOGGLE)
-                      toggleRelay();
+                      toggleRelay(relayPin[0]);
                     else
                       switchRelay(climateMaxTempTurn == TURN_ON);
                     logDateTime(now);
@@ -340,8 +343,46 @@ void ESPWebMQTTRelay::loopExtra() {
             _log->println(F(" Max6675 temperature read error!"));
           }
           climateReadTime = millis() + ds->MEASURE_TIME;
+///////////////////////////
+//          v = dht->readHumidity();
+          if (! isnan(v) && (v >= 0.0) && (v <= 100.0)) {
+            if (isnan(climateAlarm) || (abs(climateAlarm - v) > climateAlaTolerance)) {
+              climateAlarm = v;
+              //publishAlarm();
+              if (! isnan(climateMinAla)) {
+                if (climateAlarm < climateMinAla) {
+                  if (! climateMinHumTriggered) {
+                    if (climateMinAlaTurn == TURN_TOGGLE)
+                      toggleRelay(relayPin[1]);
+                    else
+                      switchRelay(relayPin[1],climateMinAlaTurn == TURN_ON);
+                    logDateTime(now);
+                    _log->println(F(" DHTx minimal humidity triggered"));
+                    climateMinHumTriggered = true;
+                  }
+                } else
+                  climateMinHumTriggered = false;
+              }
+              if (! isnan(climateMaxAla)) {
+                if (climateAlarm > climateMaxAla) {
+                  if (! climateMaxHumTriggered) {
+                    if (climateMaxAlaTurn == TURN_TOGGLE)
+                      toggleRelay(relayPin[1]);
+                    else
+                      switchRelay(relayPin[1],climateMaxAlaTurn == TURN_ON);
+                    logDateTime(now);
+                    _log->println(F(" DHTx maximal humidity triggered"));
+                    climateMaxHumTriggered = true;
+                  }
+                } else
+                  climateMaxHumTriggered = false;
+              }
+            }
+          }
+//////////////////////          
         }
       }
+
     } else {      
       
       
@@ -360,7 +401,7 @@ void ESPWebMQTTRelay::loopExtra() {
                 if (climateTemperature < climateMinTemp) {
                   if (! climateMinTempTriggered) {
                     if (climateMinTempTurn == TURN_TOGGLE)
-                      toggleRelay();
+                      toggleRelay(relayPin[0]);
                     else
                       switchRelay(climateMinTempTurn == TURN_ON);
                     logDateTime(now);
@@ -374,7 +415,7 @@ void ESPWebMQTTRelay::loopExtra() {
                 if (climateTemperature > climateMaxTemp) {
                   if (! climateMaxTempTriggered) {
                     if (climateMaxTempTurn == TURN_TOGGLE)
-                      toggleRelay();
+                      toggleRelay(relayPin[0]);
                     else
                       switchRelay(climateMaxTempTurn == TURN_ON);
                     logDateTime(now);
@@ -392,16 +433,16 @@ void ESPWebMQTTRelay::loopExtra() {
 
           v = dht->readHumidity();
           if (! isnan(v) && (v >= 0.0) && (v <= 100.0)) {
-            if (isnan(climateHumidity) || (abs(climateHumidity - v) > climateHumTolerance)) {
-              climateHumidity = v;
-              publishHumidity();
-              if (! isnan(climateMinHum)) {
-                if (climateHumidity < climateMinHum) {
+            if (isnan(climateAlarm) || (abs(climateAlarm - v) > climateAlaTolerance)) {
+              climateAlarm = v;
+              publishAlarm();
+              if (! isnan(climateMinAla)) {
+                if (climateAlarm < climateMinAla) {
                   if (! climateMinHumTriggered) {
-                    if (climateMinHumTurn == TURN_TOGGLE)
-                      toggleRelay();
+                    if (climateMinAlaTurn == TURN_TOGGLE)
+                      toggleRelay(relayPin[1]);
                     else
-                      switchRelay(climateMinHumTurn == TURN_ON);
+                      switchRelay(relayPin[1],climateMinAlaTurn == TURN_ON);
                     logDateTime(now);
                     _log->println(F(" DHTx minimal humidity triggered"));
                     climateMinHumTriggered = true;
@@ -409,13 +450,13 @@ void ESPWebMQTTRelay::loopExtra() {
                 } else
                   climateMinHumTriggered = false;
               }
-              if (! isnan(climateMaxHum)) {
-                if (climateHumidity > climateMaxHum) {
+              if (! isnan(climateMaxAla)) {
+                if (climateAlarm > climateMaxAla) {
                   if (! climateMaxHumTriggered) {
-                    if (climateMaxHumTurn == TURN_TOGGLE)
-                      toggleRelay();
+                    if (climateMaxAlaTurn == TURN_TOGGLE)
+                      toggleRelay(relayPin[1]);
                     else
-                      switchRelay(climateMaxHumTurn == TURN_ON);
+                      switchRelay(relayPin[1],climateMaxAlaTurn == TURN_ON);
                     logDateTime(now);
                     _log->println(F(" DHTx maximal humidity triggered"));
                     climateMaxHumTriggered = true;
@@ -490,10 +531,10 @@ uint16_t ESPWebMQTTRelay::readConfig() {
 
   if (offset) {
     uint16_t start = offset;
-
-    getEEPROM(offset, relay);
-    offset += sizeof(relay);
-
+for(uint8_t i=0;i<2;i++){
+    getEEPROM(offset, relay[i]);
+    offset += sizeof(relay[i]);
+}
     //offset = readSchedulesConfig(offset);
 
     sensor_t _climateSensor; // Bit-field workaround
@@ -504,8 +545,8 @@ uint16_t ESPWebMQTTRelay::readConfig() {
 
     getEEPROM(offset, climateTempTolerance);
     offset += sizeof(climateTempTolerance);
-    getEEPROM(offset, climateHumTolerance);
-    offset += sizeof(climateHumTolerance);
+    getEEPROM(offset, climateAlaTolerance);
+    offset += sizeof(climateAlaTolerance);
     getEEPROM(offset, climateMinTemp);
     offset += sizeof(climateMinTemp);
     getEEPROM(offset, climateMaxTemp);
@@ -514,14 +555,14 @@ uint16_t ESPWebMQTTRelay::readConfig() {
     offset += sizeof(climateMinTempTurn);
     getEEPROM(offset, climateMaxTempTurn);
     offset += sizeof(climateMaxTempTurn);
-    getEEPROM(offset, climateMinHum);
-    offset += sizeof(climateMinHum);
-    getEEPROM(offset, climateMaxHum);
-    offset += sizeof(climateMaxHum);
-    getEEPROM(offset, climateMinHumTurn);
-    offset += sizeof(climateMinHumTurn);
-    getEEPROM(offset, climateMaxHumTurn);
-    offset += sizeof(climateMaxHumTurn);
+    getEEPROM(offset, climateMinAla);
+    offset += sizeof(climateMinAla);
+    getEEPROM(offset, climateMaxAla);
+    offset += sizeof(climateMaxAla);
+    getEEPROM(offset, climateMinAlaTurn);
+    offset += sizeof(climateMinAlaTurn);
+    getEEPROM(offset, climateMaxAlaTurn);
+    offset += sizeof(climateMaxAlaTurn);
 
     uint8_t crc = crc8EEPROM(start, offset);
     if (readEEPROM(offset++) != crc) {
@@ -536,10 +577,10 @@ uint16_t ESPWebMQTTRelay::readConfig() {
 uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
   uint16_t offset = ESPWebMQTTBase::writeConfig(false);
   uint16_t start = offset;
-
-  putEEPROM(offset, relay);
-  offset += sizeof(relay);
-
+for(uint8_t i=0;i<2;i++){
+  putEEPROM(offset,  relay[i]);
+  offset += sizeof( relay[i]);
+}
   //offset = writeSchedulesConfig(offset);
 
   sensor_t _climateSensor = climateSensor; // Bit-field workaround
@@ -549,8 +590,8 @@ uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
 
   putEEPROM(offset, climateTempTolerance);
   offset += sizeof(climateTempTolerance);
-  putEEPROM(offset, climateHumTolerance);
-  offset += sizeof(climateHumTolerance);
+  putEEPROM(offset, climateAlaTolerance);
+  offset += sizeof(climateAlaTolerance);
   putEEPROM(offset, climateMinTemp);
   offset += sizeof(climateMinTemp);
   putEEPROM(offset, climateMaxTemp);
@@ -559,14 +600,14 @@ uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
   offset += sizeof(climateMinTempTurn);
   putEEPROM(offset, climateMaxTempTurn);
   offset += sizeof(climateMaxTempTurn);
-  putEEPROM(offset, climateMinHum);
-  offset += sizeof(climateMinHum);
-  putEEPROM(offset, climateMaxHum);
-  offset += sizeof(climateMaxHum);
-  putEEPROM(offset, climateMinHumTurn);
-  offset += sizeof(climateMinHumTurn);
-  putEEPROM(offset, climateMaxHumTurn);
-  offset += sizeof(climateMaxHumTurn);
+  putEEPROM(offset, climateMinAla);
+  offset += sizeof(climateMinAla);
+  putEEPROM(offset, climateMaxAla);
+  offset += sizeof(climateMaxAla);
+  putEEPROM(offset, climateMinAlaTurn);
+  offset += sizeof(climateMinAlaTurn);
+  putEEPROM(offset, climateMaxAlaTurn);
+  offset += sizeof(climateMaxAlaTurn);
 
   uint8_t crc = crc8EEPROM(start, offset);
   writeEEPROM(offset++, crc);
@@ -589,38 +630,31 @@ void ESPWebMQTTRelay::defaultConfig(uint8_t level) {
   }
 
   if (level < 3) {
-    relay.relayOnBoot = defRelayOnBoot;
-    relay.relayAutoOff = defRelayAutoOff;
-    relay.relayDblClkAutoOff = defRelayDblClkAutoOff;
-    memset(relay.relayName, 0, sizeof(relay.relayName));
-
+   for(uint8_t i=0;i<2;i++){   
+     relay[i].relayOnBoot = defRelayOnBoot;
+     relay[i].relayAutoOff = defRelayAutoOff;
+     relay[i].relayDblClkAutoOff = defRelayDblClkAutoOff;
+    memset( relay[i].relayName, 0, sizeof( relay[i].relayName));
+   }
 
 
     climateSensor = SENSOR_NONE;
     climateTempTolerance = defTemperatureTolerance;
-    climateHumTolerance = defHumidityTolerance;
+    climateAlaTolerance = defAlarmTolerance;
     climateMinTemp = NAN;
     climateMaxTemp = NAN;
     climateMinTempTurn = TURN_OFF;
     climateMaxTempTurn = TURN_OFF;
-    climateMinHum = NAN;
-    climateMaxHum = NAN;
-    climateMinHumTurn = TURN_OFF;
-    climateMaxHumTurn = TURN_OFF;
+    climateMinAla = NAN;
+    climateMaxAla = NAN;
+    climateMinAlaTurn = TURN_OFF;
+    climateMaxAlaTurn = TURN_OFF;
   }
 }
 
 bool ESPWebMQTTRelay::setConfigParam(const String &name, const String &value) {
   if (! ESPWebMQTTBase::setConfigParam(name, value)) {
-    if (name.equals(FPSTR(paramRelayOnBoot))) {
-      relay.relayOnBoot = constrain(value.toInt(), 0, 1);
-    } else if (name.equals(FPSTR(paramRelayAutoOff))) {
-      relay.relayAutoOff = _max(0, value.toInt());
-    } else if (name.equals(FPSTR(paramRelayDblClkAutoOff))) {
-      relay.relayDblClkAutoOff = _max(0, value.toInt());
-    } else if (name.equals(FPSTR(paramRelayName))) {
-      strncpy(relay.relayName, value.c_str(), sizeof(relay.relayName));
-    } else if (name.equals(FPSTR(paramClimateSensor))) {
+ if (name.equals(FPSTR(paramClimateSensor))) {
       sensor_t _climateSensor = (sensor_t)value.toInt();
 
       if (climateSensor != _climateSensor) {
@@ -637,8 +671,8 @@ bool ESPWebMQTTRelay::setConfigParam(const String &name, const String &value) {
       }
     } else if (name.equals(FPSTR(paramClimateTempTolerance))) {
       climateTempTolerance = _max(0, value.toFloat());
-    } else if (name.equals(FPSTR(paramClimateHumTolerance))) {
-      climateHumTolerance = _max(0, value.toFloat());
+    } else if (name.equals(FPSTR(paramClimateAlaTolerance))) {
+      climateAlaTolerance = _max(0, value.toFloat());
     } else if (name.equals(FPSTR(paramClimateMinTemp))) {
       if (value.length())
         climateMinTemp = value.toFloat();
@@ -653,20 +687,20 @@ bool ESPWebMQTTRelay::setConfigParam(const String &name, const String &value) {
       climateMinTempTurn = (turn_t)value.toInt();
     } else if (name.equals(FPSTR(paramClimateMaxTempTurn))) {
       climateMaxTempTurn = (turn_t)value.toInt();
-    } else if (name.equals(FPSTR(paramClimateMinHum))) {
+    } else if (name.equals(FPSTR(paramClimateMinAla))) {
       if (value.length())
-        climateMinHum = value.toFloat();
+        climateMinAla = value.toFloat();
       else
-        climateMinHum = NAN;
-    } else if (name.equals(FPSTR(paramClimateMaxHum))) {
+        climateMinAla = NAN;
+    } else if (name.equals(FPSTR(paramClimateMaxAla))) {
       if (value.length())
-        climateMaxHum = value.toFloat();
+        climateMaxAla = value.toFloat();
       else
-        climateMaxHum = NAN;
-    } else if (name.equals(FPSTR(paramClimateMinHumTurn))) {
-      climateMinHumTurn = (turn_t)value.toInt();
-    } else if (name.equals(FPSTR(paramClimateMaxHumTurn))) {
-      climateMaxHumTurn = (turn_t)value.toInt();
+        climateMaxAla = NAN;
+    } else if (name.equals(FPSTR(paramClimateMinAlaTurn))) {
+      climateMinAlaTurn = (turn_t)value.toInt();
+    } else if (name.equals(FPSTR(paramClimateMaxAlaTurn))) {
+      climateMaxAlaTurn = (turn_t)value.toInt();
     } else
       return false;
   }
@@ -873,28 +907,31 @@ Uptime: <span id=\"");
     } 
     }
   }
+  for(uint8_t i=0;i<2;i++)
+  {
   page += F("</p>\n");
   page += F("<input type=\"checkbox\" class=\"checkbox\" id=\"");
   page += FPSTR(jsonRelay);
   page += F("\" onchange=\"switchRelay(this.checked)\" ");
-  if (digitalRead(relayPin) == relayLevel)
+  if (digitalRead(relayPin[i]) == relayLevel)
     page += FPSTR(extraChecked);
   page += F(">\n\
 <label for=\"");
   page += FPSTR(jsonRelay);
   page += F("\">");
-  if (relay.relayName[0])
-    page += charBufToString(relay.relayName, sizeof(relay.relayName));
+  if (relay[i].relayName[0])
+    page += charBufToString(relay[i].relayName, sizeof(relay[i].relayName));
   else
     page += F("Relay");
   page += F("</label>\n\
 <input type=\"text\" id=\"");
   page += FPSTR(jsonRelayAutoOff);
   page += F("\" value=\"");
-  page += String(relay.relayAutoOff);
+  page += String(relay[i].relayAutoOff);
   page += F("\" size=5 maxlength=5 />\n\
 sec. to auto-off\n\
 <p>\n");
+  }
   page += navigator();
   page += ESPWebBase::webPageEnd();
 
@@ -929,7 +966,7 @@ String ESPWebMQTTRelay::jsonData() {
       result += F(",\"");
       result += FPSTR(jsonHumidity);
       result += F("\":");
-      result += isnan(climateHumidity) ? F("\"?\"") : String(climateHumidity);
+      result += isnan(climateAlarm) ? F("\"?\"") : String(climateAlarm);
     }
   }
 
@@ -1086,9 +1123,9 @@ void ESPWebMQTTRelay::handleClimateConfig() {
   page += F("\" size=10 maxlength=10><br/>\n\
 <label>Humidity tolerance:</label><br/>\n\
 <input type=\"text\" name=\"");
-  page += FPSTR(paramClimateHumTolerance);
+  page += FPSTR(paramClimateAlaTolerance);
   page += F("\" value=\"");
-  page += String(climateHumTolerance);
+  page += String(climateAlaTolerance);
   page += F("\" size=10 maxlength=10><br/>\n\
 <label>Minimal temperature:</label><br/>\n\
 <input type=\"text\" name=\"");
@@ -1146,56 +1183,56 @@ void ESPWebMQTTRelay::handleClimateConfig() {
   page += F(">TOGGLE<br/>\n\
 <label>Minimal humidity:</label><br/>\n\
 <input type=\"text\" name=\"");
-  page += FPSTR(paramClimateMinHum);
+  page += FPSTR(paramClimateMinAla);
   page += F("\" value=\"");
-  if (! isnan(climateMinHum))
-    page += String(climateMinHum);
+  if (! isnan(climateMinAla))
+    page += String(climateMinAla);
   page += F("\" size=10 maxlength=10>\n\
 (leave blank if not used)<br/>\n\
 <label>Turn relay</label>\n\
 <input type=\"radio\" name=\"");
-  page += FPSTR(paramClimateMinHumTurn);
+  page += FPSTR(paramClimateMinAlaTurn);
   page += F("\" value=\"0\"");
-  if (climateMinHumTurn == TURN_OFF)
+  if (climateMinAlaTurn == TURN_OFF)
     page += F(" checked");
   page += F(">OFF\n\
 <input type=\"radio\" name=\"");
-  page += FPSTR(paramClimateMinHumTurn);
+  page += FPSTR(paramClimateMinAlaTurn);
   page += F("\" value=\"1\"");
-  if (climateMinHumTurn == TURN_ON)
+  if (climateMinAlaTurn == TURN_ON)
     page += F(" checked");
   page += F(">ON\n\
 <input type=\"radio\" name=\"");
-  page += FPSTR(paramClimateMinHumTurn);
+  page += FPSTR(paramClimateMinAlaTurn);
   page += F("\" value=\"2\"");
-  if (climateMinHumTurn == TURN_TOGGLE)
+  if (climateMinAlaTurn == TURN_TOGGLE)
     page += F(" checked");
   page += F(">TOGGLE<br/>\n\
 <label>Maximal humidity:</label><br/>\n\
 <input type=\"text\" name=\"");
-  page += FPSTR(paramClimateMaxHum);
+  page += FPSTR(paramClimateMaxAla);
   page += F("\" value=\"");
-  if (! isnan(climateMaxHum))
-    page += String(climateMaxHum);
+  if (! isnan(climateMaxAla))
+    page += String(climateMaxAla);
   page += F("\" size=10 maxlength=10>\n\
 (leave blank if not used)<br/>\n\
 <label>Turn relay</label>\n\
 <input type=\"radio\" name=\"");
-  page += FPSTR(paramClimateMaxHumTurn);
+  page += FPSTR(paramClimateMaxAlaTurn);
   page += F("\" value=\"0\"");
-  if (climateMaxHumTurn == TURN_OFF)
+  if (climateMaxAlaTurn == TURN_OFF)
     page += F(" checked");
   page += F(">OFF\n\
 <input type=\"radio\" name=\"");
-  page += FPSTR(paramClimateMaxHumTurn);
+  page += FPSTR(paramClimateMaxAlaTurn);
   page += F("\" value=\"1\"");
-  if (climateMaxHumTurn == TURN_ON)
+  if (climateMaxAlaTurn == TURN_ON)
     page += F(" checked");
   page += F(">ON\n\
 <input type=\"radio\" name=\"");
-  page += FPSTR(paramClimateMaxHumTurn);
+  page += FPSTR(paramClimateMaxAlaTurn);
   page += F("\" value=\"2\"");
-  if (climateMaxHumTurn == TURN_TOGGLE)
+  if (climateMaxAlaTurn == TURN_TOGGLE)
     page += F(" checked");
   page += F(">TOGGLE<br/>\n\
 <p>\n");
@@ -1316,10 +1353,11 @@ void ESPWebMQTTRelay::switchRelay(bool on, uint16_t customAutoOff) {
   }
 }
 
-inline void ESPWebMQTTRelay::toggleRelay() {
-  switchRelay(digitalRead(relayPin) != relayLevel);
-}
 
+
+inline void ESPWebMQTTRelay::toggleRelay(uint8_t port) {
+  switchRelay(port,digitalRead(port) != relayLevel);
+}
 
 void ESPWebMQTTRelay::publishTemperature() {
   if (pubSubClient->connected()) {
@@ -1334,7 +1372,7 @@ void ESPWebMQTTRelay::publishTemperature() {
   }
 }
 
-void ESPWebMQTTRelay::publishHumidity() {
+void ESPWebMQTTRelay::publishAlarm() {
   if (pubSubClient->connected()) {
     String topic;
 
@@ -1343,7 +1381,7 @@ void ESPWebMQTTRelay::publishHumidity() {
       topic += _mqttClient;
     }
     topic += FPSTR(mqttHumidityTopic);
-    mqttPublish(topic, String(climateHumidity));
+    mqttPublish(topic, String(climateAlarm));
   }
 }
 
