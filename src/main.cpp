@@ -1,6 +1,7 @@
 #define USEIRREMOTE // Закомментируйте это макроопределение, если не нужна поддержка ИК-пульта
 #define USEDHT // Закомментируйте это макроопределение, если не нужна поддержка датчиков DHTxx
 #define USEDS1820 // Закомментируйте это макроопределение, если не нужна поддержка датчиков DS18x20
+#define USEMAX6675 // Закомментируйте это макроопределение, если не нужна поддержка датчиков DS18x20
 #define USELDR // Закомментируйте это макроопределение, если не нужна поддержка датчика освещенности
 
 #include <pgmspace.h>
@@ -14,6 +15,11 @@
 #ifdef USEDS1820
 #include "DS1820.h"
 #endif
+#ifdef USEMAX6675
+#include "max6675.h"
+#endif
+
+
 #include "ESPWebMQTT.h"
 #include "Date.h"
 #include "Schedule.h"
@@ -55,6 +61,12 @@ const bool defDHTType = DHT11; // Тип датчика DHT по умолчан�
 const int8_t defDSPin = -1; // Пин, к которому подключен датчик DS1820 по умолчанию (-1 - не подключено)
 #endif
 
+#ifdef USEMAX6675
+const uint8_t MAX_MISO = 12;//по умолчанию (-1 - не подключено)
+const uint8_t  MAX_CS = 15;
+const uint8_t MAXS_CLK = 14;
+#endif
+
 const char pathIndexCss[] PROGMEM = "/index.css";
 const char pathIndexJs[] PROGMEM = "/index.js";
 const char pathRelay[] PROGMEM = "/relay"; // Путь до страницы настройки параметров реле
@@ -66,7 +78,7 @@ const char pathSetSchedule[] PROGMEM = "/setschedule"; // Путь до стра
 #ifdef USEIRREMOTE
 const char pathIRData[] PROGMEM = "/irdata"; // Путь до страницы, возвращающей JSON-пакет данных о последней нажатой кнопке пульта ДУ
 #endif
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820)|| defined(USEMAX6675)
 const char pathClimate[] PROGMEM = "/climate"; // Путь до страницы настройки параметров датчиков температуры
 #endif
 #ifdef USELDR
@@ -119,6 +131,19 @@ const char paramDSMaxTempRelay[] PROGMEM = "dsmaxtemprelay";
 const char paramDSMinTempTurn[] PROGMEM = "dsmintempturn";
 const char paramDSMaxTempTurn[] PROGMEM = "dsmaxtempturn";
 #endif
+
+#ifdef USEMAX6675
+const char paramMAXGPIO[] PROGMEM = "maxgpio";
+const char paramMAXMinTemp[] PROGMEM = "maxmintemp";
+const char paramMAXMaxTemp[] PROGMEM = "maxmaxtemp";
+const char paramMAXMinTempRelay[] PROGMEM = "maxmintemprelay";
+const char paramMAXMaxTempRelay[] PROGMEM = "maxmaxtemprelay";
+const char paramMAXMinTempTurn[] PROGMEM = "maxmintempturn";
+const char paramMAXMaxTempTurn[] PROGMEM = "maxmaxtempturn";
+#endif
+
+
+
 #ifdef USELDR
 const char paramLDRMinBright[] PROGMEM = "ldrminbright";
 const char paramLDRMaxBright[] PROGMEM = "ldrmaxbright";
@@ -152,6 +177,12 @@ const char jsonHumidity[] PROGMEM = "humidity";
 #ifdef USEDS1820
 const char jsonTemperature2[] PROGMEM = "temperature2";
 #endif
+#ifdef USEMAX6675
+const char jsonTemperature3[] PROGMEM = "temperature3";
+#endif
+
+
+
 #ifdef USELDR
 const char jsonLDR[] PROGMEM = "ldr";
 #endif
@@ -165,6 +196,11 @@ const char mqttHumidityTopic[] PROGMEM = "/DHT/Humidity";
 #ifdef USEDS1820
 const char mqttTemperatureTopic2[] PROGMEM = "/DS1820/Temperature";
 #endif
+#ifdef USEMAX6675
+const char mqttTemperatureTopic3[] PROGMEM = "/MAX6675/Temperature";
+#endif
+
+
 #ifdef USELDR
 const char mqttLDRTopic[] PROGMEM = "/LDR";
 #endif
@@ -203,7 +239,7 @@ protected:
   void handleScheduleConfig(); // Обработчик страницы настройки параметров расписания
   void handleGetSchedule(); // Обработчик страницы, возвращающей JSON-пакет элемента расписания
   void handleSetSchedule(); // Обработчик страницы изменения элемента расписания
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820)|| defined(USEMAX6675)
   void handleClimateConfig(); // Обработчик страницы настройки параметров датчиков температуры
 #endif
 #ifdef USELDR
@@ -214,7 +250,7 @@ protected:
   String btnRelayConfig(); // HTML-код кнопки вызова настройки реле
   String btnControlConfig(); // HTML-код кнопки вызова настройки кнопок и пульта ДУ
   String btnScheduleConfig(); // HTML-код кнопки вызова настройки расписания
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820) || defined(USEMAX6675)
   String btnClimateConfig(); // HTML-код кнопки вызова настройки датчика температуры
 #endif
 #ifdef USELDR
@@ -240,6 +276,10 @@ private:
 
 #ifdef USEDS1820
   void publishTemperature2(); // Публикация температуры DS1820 в MQTT
+#endif
+
+#ifdef USEMAX6675
+  void publishTemperature3(); // Публикация температуры MAX6675 в MQTT
 #endif
 
 #ifdef USELDR
@@ -301,6 +341,22 @@ private:
 
   DS1820* ds;
 #endif
+
+
+#ifdef USEMAX6675
+  int8_t maxusePins; // Пин, к которому подключен датчик DS1820
+
+  uint32_t maxReadTime; // Время в миллисекундах, после которого можно считывать новое значение температуры
+  float maxTemperature; // Значение успешно прочитанной температуры
+  float maxMinTemp, maxMaxTemp; // Минимальное и максимальное значение температуры срабатывания реле
+  uint8_t maxMinTempRelay, maxMaxTempRelay; // Какой канал реле и что с ним делать по срабатыванию события (6 младших бит - номер канала реле, 2 старших бита - вкл/выкл/перекл)
+  bool maxMinTempTriggered, maxMaxTempTriggered; // Было ли срабатывание реле по порогу температуры?
+
+  
+  MAX6675* Max6675;
+#endif
+
+
 
 #ifdef USELDR
   uint32_t ldrReadTime; // Время в миллисекундах, после которого можно считывать новое значение освещенности
@@ -386,6 +442,21 @@ void ESPWebMQTTRelay::setupExtra() {
   dsMinTempTriggered = false;
   dsMaxTempTriggered = false;
 #endif
+
+#ifdef USEMAX6675
+  if (maxusePins != -1) {
+    Max6675 = new MAX6675(MAXS_CLK, MAX_CS, MAX_MISO);
+    
+      maxReadTime = millis() + Max6675->MEASURE_TIME;
+    }
+  
+  maxTemperature = NAN;
+  maxMinTempTriggered = false;
+  maxMaxTempTriggered = false;
+#endif
+
+
+
 
 #ifdef USELDR
   pinMode(A0, INPUT);
@@ -588,6 +659,51 @@ void ESPWebMQTTRelay::loopExtra() {
   }
 #endif
 
+#ifdef USEMAX6675
+  if ((maxusePins != -1) && (Max6675 != NULL)) {
+    if ((int32_t)(millis() - maxReadTime) >= 0) {
+      float v;
+
+      v = Max6675->readCelsius();
+      if (! isnan(v) && (v >= -50.0) && (v <= 50.0)) {
+        if (isnan(maxTemperature) || (maxTemperature != v)) {
+          maxTemperature = v;
+          publishTemperature3();
+          if (! isnan(maxMinTemp)) {
+            if (maxTemperature < maxMinTemp) {
+              if (! maxMinTempTriggered) {
+                if ((maxMinTempRelay & 0x80) != 0) // toggle bit is set
+                  toggleRelay(maxMinTempRelay & 0x3F);
+                else
+                  switchRelay(maxMinTempRelay & 0x3F, (maxMinTempRelay >> 6) & 0x01);
+                _log->println(F("Max6675 minimal temperature triggered"));
+                maxMinTempTriggered = true;
+              }
+            } else
+              maxMinTempTriggered = false;
+          }
+          if (! isnan(maxMaxTemp)) {
+            if (maxTemperature > maxMaxTemp) {
+              if (! maxMaxTempTriggered) {
+                if ((maxMaxTempRelay & 0x80) != 0) // toggle bit is set
+                  toggleRelay(maxMaxTempRelay & 0x3F);
+                else
+                  switchRelay(maxMaxTempRelay & 0x3F, (maxMaxTempRelay >> 6) & 0x01);
+                _log->println(F("Max6675 maximal temperature triggered"));
+                maxMaxTempTriggered = true;
+              }
+            } else
+              maxMaxTempTriggered = false;
+          }
+        }
+      } else {
+        _log->println(F("Max6675 temperature read error!"));
+      }
+      maxReadTime = millis() + 1000; // ds->MEASURE_TIME;
+    }
+  }
+#endif
+
 #ifdef USELDR
   if ((int32_t)(millis() - ldrReadTime) >= 0) {
     static const int16_t LDR_TOLERANCE = 120;
@@ -730,6 +846,19 @@ uint16_t ESPWebMQTTRelay::readConfig() {
     offset += sizeof(dsMaxTempRelay);
 #endif
 
+#ifdef USEMAX6675
+    getEEPROM(offset, maxusePins);
+    offset += sizeof(maxusePins);
+    getEEPROM(offset, maxMinTemp);
+    offset += sizeof(maxMinTemp);
+    getEEPROM(offset, maxMaxTemp);
+    offset += sizeof(maxMaxTemp);
+    getEEPROM(offset, maxMinTempRelay);
+    offset += sizeof(maxMinTempRelay);
+    getEEPROM(offset, maxMaxTempRelay);
+    offset += sizeof(maxMaxTempRelay);
+#endif
+
 #ifdef USELDR
     getEEPROM(offset, ldrMinBright);
     offset += sizeof(ldrMinBright);
@@ -803,6 +932,19 @@ uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
   offset += sizeof(dsMinTempRelay);
   putEEPROM(offset, dsMaxTempRelay);
   offset += sizeof(dsMaxTempRelay);
+#endif
+
+#ifdef USEMAX6675
+  putEEPROM(offset, maxusePins);
+  offset += sizeof(maxusePins);
+  putEEPROM(offset, maxMinTemp);
+  offset += sizeof(maxMinTemp);
+  putEEPROM(offset, maxMaxTemp);
+  offset += sizeof(maxMaxTemp);
+  putEEPROM(offset, maxMinTempRelay);
+  offset += sizeof(maxMinTempRelay);
+  putEEPROM(offset, maxMaxTempRelay);
+  offset += sizeof(maxMaxTempRelay);
 #endif
 
 #ifdef USELDR
@@ -887,6 +1029,15 @@ void ESPWebMQTTRelay::defaultConfig(uint8_t level) {
     dsMinTempRelay = 0;
     dsMaxTempRelay = 0;
 #endif
+
+#ifdef USEMAX6675
+    maxusePins = defDSPin;
+    maxMinTemp = NAN;
+    maxMaxTemp = NAN;
+    maxMinTempRelay = 0;
+    maxMaxTempRelay = 0;
+#endif
+
 
 #ifdef USELDR
     ldrMinBright = -1;
@@ -1002,6 +1153,36 @@ bool ESPWebMQTTRelay::setConfigParam(const String& name, const String& value) {
         dsMaxTempRelay |= ((value.toInt() & 0x03) << 6);
       } else
 #endif
+
+#ifdef USEMAX6675
+      if (name.equals(FPSTR(paramMAXGPIO)))
+        maxusePins = constrain(value.toInt(), -1, 16);
+      else if (name.equals(FPSTR(paramMAXMinTemp))) {
+        if (value.length())
+          maxMinTemp = value.toFloat();
+        else
+          maxMinTemp = NAN;
+      } else if (name.equals(FPSTR(paramMAXMaxTemp))) {
+        if (value.length())
+          maxMaxTemp = value.toFloat();
+        else
+          maxMaxTemp = NAN;
+      } else if (name.equals(FPSTR(paramMAXMinTempRelay))) {
+        maxMinTempRelay &= 0B11000000;
+        maxMinTempRelay |= (value.toInt() & 0B00111111);
+      } else if (name.equals(FPSTR(paramMAXMaxTempRelay))) {
+        maxMaxTempRelay &= 0B11000000;
+        maxMaxTempRelay |= (value.toInt() & 0B00111111);
+      } else if (name.equals(FPSTR(paramMAXMinTempTurn))) {
+        maxMinTempRelay &= 0B00111111;
+        maxMinTempRelay |= ((value.toInt() & 0x03) << 6);
+      } else if (name.equals(FPSTR(paramMAXMaxTempTurn))) {
+        maxMaxTempRelay &= 0B00111111;
+        maxMaxTempRelay |= ((value.toInt() & 0x03) << 6);
+      } else
+#endif
+
+
 #ifdef USELDR
       if (name.equals(FPSTR(paramLDRMinBright))) {
         if (value.length())
@@ -1088,6 +1269,14 @@ Humidity (DHT): <span id=\"");
     page += F("\">?</span> <sup>o</sup>C<br/>\n");
   }
 #endif
+#ifdef USEMAX6675
+  if ((maxusePins != -1) && (Max6675 != NULL)) {
+    page += F("Temperature (Max6675): <span id=\"");
+    page += FPSTR(jsonTemperature3);
+    page += F("\">?</span> <sup>o</sup>C<br/>\n");
+  }
+#endif
+
 #ifdef USELDR
   page += F("Brightness: <span id=\"");
   page += FPSTR(jsonLDR);
@@ -1170,6 +1359,13 @@ String ESPWebMQTTRelay::jsonData() {
   result += F("\":");
   result += isnan(dsTemperature) ? F("\"?\"") : String(dsTemperature);
 #endif
+#ifdef USEMAX6675
+  result += F(",\"");
+  result += FPSTR(jsonTemperature3);
+  result += F("\":");
+  result += isnan(maxTemperature) ? F("\"?\"") : String(maxTemperature);
+#endif
+
 #ifdef USELDR
   result += F(",\"");
   result += FPSTR(jsonLDR);
@@ -1309,6 +1505,16 @@ else\n");
     script += F(";\n");
   }
 #endif
+#ifdef USEMAX6675
+  if ((maxusePins != -1) && (Max6675 != NULL)) {
+    script += FPSTR(getElementById);
+    script += FPSTR(jsonTemperature3);
+    script += F("').innerHTML = data.");
+    script += FPSTR(jsonTemperature3);
+    script += F(";\n");
+  }
+#endif
+
 #ifdef USELDR
   script += FPSTR(getElementById);
   script += FPSTR(jsonLDR);
@@ -2176,7 +2382,7 @@ Wait for 1 sec. to return to previous page.\n");
   }
 }
 
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820)|| defined(MAX6675)
 void ESPWebMQTTRelay::handleClimateConfig() {
 #ifdef USEDHT
   static const char dhtTypes[][6] PROGMEM = { "DHT11", "DHT21", "DHT22" };
@@ -2431,6 +2637,124 @@ turn\n\
   page += F(">TOGGLE\n\
 </br>\n");
 #endif
+
+#ifdef USEMAX6675
+  page += F("<h3>Max6675 Setup</h3>\n\
+<label>GPIO:</label><br/>\n\
+<select name=\"");
+  page += FPSTR(paramMAXGPIO);
+  page += F("\" size=1>\n");
+
+  for (byte i = 0; i < sizeof(gpios) / sizeof(gpios[0]); i++) {
+    int8_t gpio = pgm_read_byte(gpios + i);
+    page += F("<option value=\"");
+    page += String(gpio);
+    page += charQuote;
+    if (maxusePins == gpio)
+      page += F(" selected");
+    page += charGreater;
+    if (gpio == -1)
+      page += FPSTR(strNone);
+    else
+      page += String(gpio);
+    page += F("</option>\n");
+  }
+  page += F("</select><br/>\n\
+<label>Minimal temperature:</label></br>\n\
+<input type=\"text\" name=\"");
+  page += FPSTR(paramMAXMinTemp);
+  page += F("\" value=\"");
+
+  if (! isnan(maxMinTemp))
+    page += String(maxMinTemp);
+  page += F("\" size=10 maxlength=10>\n\
+(leave blank if not used)</br>\n\
+<label>Relay #</label>\n\
+<select name=\"");
+  page += FPSTR(paramMAXMinTempRelay);
+  page += F("\" size=\"1\">\n");
+
+  for (byte i = 0; i < maxRelays; ++i) {
+    page += F("<option value=\"");
+    page += String(i);
+    page += charQuote;
+    if ((maxMinTempRelay & 0B00111111) == i)
+      page += F(" selected");
+    page += charGreater;
+    page += String(i + 1);
+    page += F("</option>\n");
+  }
+  page += F("</select>\n\
+turn\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAXMinTempTurn);
+  page += F("\" value=\"1\"");
+  if ((maxMinTempRelay & 0B11000000) == 0B01000000)
+    page += F(" checked");
+  page += F(">ON\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAXMinTempTurn);
+  page += F("\" value=\"0\"");
+  if ((maxMinTempRelay & 0B11000000) == 0B00000000)
+    page += F(" checked");
+  page += F(">OFF\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAXMinTempTurn);
+  page += F("\" value=\"2\"");
+  if ((maxMinTempRelay & 0B11000000) == 0B10000000)
+    page += F(" checked");
+  page += F(">TOGGLE\n\
+</br>\n\
+<label>Maximal temperature:</label></br>\n\
+<input type=\"text\" name=\"");
+  page += FPSTR(paramMAXMaxTemp);
+  page += F("\" value=\"");
+
+  if (! isnan(maxMaxTemp))
+    page += String(maxMaxTemp);
+  page += F("\" size=10 maxlength=10>\n\
+(leave blank if not used)</br>\n\
+<label>Relay #</label>\n\
+<select name=\"");
+  page += FPSTR(paramMAXMaxTempRelay);
+  page += F("\" size=\"1\">\n");
+
+  for (byte i = 0; i < maxRelays; ++i) {
+    page += F("<option value=\"");
+    page += String(i);
+    page += charQuote;
+    if ((maxMaxTempRelay & 0B00111111) == i)
+      page += F(" selected");
+    page += charGreater;
+    page += String(i + 1);
+    page += F("</option>\n");
+  }
+  page += F("</select>\n\
+turn\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAXMaxTempTurn);
+  page += F("\" value=\"1\"");
+  if ((maxMaxTempRelay & 0B11000000) == 0B01000000)
+    page += F(" checked");
+  page += F(">ON\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAXMaxTempTurn);
+  page += F("\" value=\"0\"");
+  if ((maxMaxTempRelay & 0B11000000) == 0B00000000)
+    page += F(" checked");
+  page += F(">OFF\n\
+<input type=\"radio\" name=\"");
+  page += FPSTR(paramMAXMaxTempTurn);
+  page += F("\" value=\"2\"");
+  if ((maxMaxTempRelay & 0B11000000) == 0B10000000)
+    page += F(" checked");
+  page += F(">TOGGLE\n\
+</br>\n");
+#endif
+
+
+
+
   page += F("<p>\n");
 
   page += ESPWebBase::tagInput(FPSTR(typeSubmit), strEmpty, F("Save"));
@@ -2597,7 +2921,7 @@ String ESPWebMQTTRelay::btnScheduleConfig() {
   return result;
 }
 
-#if defined(USEDHT) || defined(USEDS1820)
+#if defined(USEDHT) || defined(USEDS1820)|| defined(USEMAX6675)
 String ESPWebMQTTRelay::btnClimateConfig() {
   String result = ESPWebBase::tagInput(FPSTR(typeButton), strEmpty, F("Climate Setup"), String(F("onclick=\"location.href='")) + String(FPSTR(pathClimate)) + String(F("'\"")));
   result += charLF;
@@ -2879,6 +3203,22 @@ void ESPWebMQTTRelay::publishTemperature2() {
   }
 }
 #endif
+
+#ifdef USEMAX6675
+void ESPWebMQTTRelay::publishTemperature3() {
+  if (pubSubClient->connected()) {
+    String topic;
+
+    if (_mqttClient != strEmpty) {
+      topic += charSlash;
+      topic += _mqttClient;
+    }
+    topic += FPSTR(mqttTemperatureTopic3);
+    mqttPublish(topic, String(maxTemperature));
+  }
+}
+#endif
+
 
 #ifdef USELDR
 void ESPWebMQTTRelay::publishLDR() {
