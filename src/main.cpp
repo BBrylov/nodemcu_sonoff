@@ -28,7 +28,7 @@
 //#define WIFISSID "yourssid" // Имя вашей сети для параметров по умолчанию
 //#define WIFIPASS "yourpass" // Пароль от вашей сети для параметров по умолчанию
 
-const int8_t maxRelays = 4; // Количество каналов реле
+const int8_t maxRelays = 2; // Количество каналов реле
 const int8_t maxSchedules = 10; // Количество элементов расписания
 
 const char overSSID[] PROGMEM = "ESP_Relay_"; // Префикс имени точки доступа по умолчанию
@@ -215,6 +215,8 @@ const char mqttLDRTopic[] PROGMEM = "/LDR";
 #endif
 
 const int8_t gpios[] PROGMEM = { -1, 0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16 }; // Доступные для подключения GPIO
+const int8_t gpiosmax[] PROGMEM = { -1, 1 }; // Доступные для подключения GPIO
+
 const char strNone[] PROGMEM = "(None)";
 
 const uint8_t RELAY_NAME_SIZE = 16;
@@ -1688,8 +1690,8 @@ void ESPWebMQTTRelay::handleRelayConfig() {
     page += String(id);
     page += F("\" size=1>\n");
 
-    for (byte i = 0; i < sizeof(gpios) / sizeof(gpios[0]); i++) {
-      int8_t gpio = pgm_read_byte(gpios + i);
+for (byte i = 0; i < sizeof(gpios) / sizeof(gpios[0]); i++) {
+     int8_t gpio = pgm_read_byte(gpios + i);
       page += F("<option value=\"");
       page += String(gpio);
       page += charQuote;
@@ -2754,13 +2756,13 @@ turn\n\
 
 #ifdef USEMAX6675
   page += F("<h3>Max6675 Setup</h3>\n\
-<label>GPIO:</label><br/>\n\
+<label>Connect:</label><br/>\n\
 <select name=\"");
   page += FPSTR(paramMAXGPIO);
   page += F("\" size=1>\n");
 
-  for (byte i = 0; i < sizeof(gpios) / sizeof(gpios[0]); i++) {
-    int8_t gpio = pgm_read_byte(gpios + i);
+  for (byte i = 0; i < sizeof(gpiosmax) / sizeof(gpiosmax[0]); i++) {
+    int8_t gpio = pgm_read_byte(gpiosmax + i);
     page += F("<option value=\"");
     page += String(gpio);
     page += charQuote;
@@ -2770,7 +2772,7 @@ turn\n\
     if (gpio == -1)
       page += FPSTR(strNone);
     else
-      page += String(gpio);
+      page += F(" Enable");
     page += F("</option>\n");
   }
   page += F("</select><br/>\n\
