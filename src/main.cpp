@@ -64,7 +64,7 @@ const int8_t defDSPin = -1; // Пин, к которому подключен д
 #ifdef USEMAX6675
 const uint8_t MAX_MISO = 12;//по умолчанию (-1 - не подключено)
 const uint8_t  MAX_CS = 15;
-const uint8_t MAXS_CLK = 14;
+const uint8_t MAXS_CLK = 0;
 const int8_t defMAXPin = -1; // Пин, к которому подключен датчик DS1820 по умолчанию (-1 - не подключено)
 #endif
 
