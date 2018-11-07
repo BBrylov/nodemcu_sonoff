@@ -1353,7 +1353,7 @@ void ESPWebMQTTRelay::setupHttpServer() {
 }
 
 void ESPWebMQTTRelay::handleRootPage() {
-  String page = ESPWebBase::webPageStart(F("ESP Relay"));
+  String page = ESPWebBase::webPageStart(F("ESP Relay v2"));
   page += ESPWebBase::webPageStyle(pathIndexCss, true);
   page += ESPWebBase::webPageScript(pathIndexJs, true);
   page += ESPWebBase::webPageBody();
