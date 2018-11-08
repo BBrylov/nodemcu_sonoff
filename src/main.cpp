@@ -689,7 +689,7 @@ void ESPWebMQTTRelay::loopExtra() {
       float v;
 
       v = Max6675->readCelsius();
-      if (! isnan(v) && (v >= -50.0) && (v <= 50.0)) {
+      if (! isnan(v) && (v >= -50.0) && (v <= 150.0)) {
         if (isnan(maxTemperature) || (maxTemperature != v)) {
           maxTemperature = v;
           publishTemperature3();
@@ -1357,7 +1357,7 @@ void ESPWebMQTTRelay::handleRootPage() {
   page += ESPWebBase::webPageStyle(pathIndexCss, true);
   page += ESPWebBase::webPageScript(pathIndexJs, true);
   page += ESPWebBase::webPageBody();
-  page += F("<h3>ESP Relay</h3>\n\
+  page += F("<h3>ESP Relay v2</h3>\n\
 <p>\n\
 MQTT broker: <span id=\"");
   page += FPSTR(jsonMQTTConnected);
