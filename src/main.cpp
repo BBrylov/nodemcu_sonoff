@@ -148,7 +148,8 @@ const char paramMAX_Ala_MinTempRelay[] PROGMEM = "maxalamintemprelay";
 const char paramMAX_Ala_MaxTempRelay[] PROGMEM = "maxalamaxtemprelay";
 const char paramMAX_Ala_MinTempTurn[] PROGMEM = "maxalamintempturn";
 const char paramMAX_Ala_MaxTempTurn[] PROGMEM = "maxalamaxtempturn";
-
+const char paramAdaptive[] PROGMEM = "maxbtnadapt";
+const char paramMAXAdaprive[] PROGMEM = "maxadaptval";
 #endif
 
 
@@ -188,6 +189,8 @@ const char jsonTemperature2[] PROGMEM = "temperature2";
 #endif
 #ifdef USEMAX6675
 const char jsonTemperature3[] PROGMEM = "temperature3";
+const char jsonMaxCorTemperature[] PROGMEM = "mincortemp";
+const char jsonMinCorTemperature[] PROGMEM = "maxcortemp";
 #endif
 
 
@@ -228,7 +231,7 @@ public:
 protected:
   void setupExtra();
   void loopExtra();
-
+  uint8_t A_Adaptive(uint8_t event);
   uint16_t readRTCmemory();
   uint16_t writeRTCmemory();
   uint16_t readConfig();
@@ -362,9 +365,10 @@ private:
   float maxMinTemp, maxMaxTemp; // Минимальное и максимальное значение температуры срабатывания реле
   uint8_t maxMinTempRelay, maxMaxTempRelay; // Какой канал реле и что с ним делать по срабатыванию события (6 младших бит - номер канала реле, 2 старших бита - вкл/выкл/перекл)
   bool maxMinTempTriggered, maxMaxTempTriggered; // Было ли срабатывание реле по порогу температуры?
- 
+ uint8_t maxbtnAdaptive; // флаг фдаптивного управления по корридору
+float maxAdaptVal; // значение корридра
 
-  float maxAlaMinTemp, maxAlaMaxTemp; // Минимальное и максимальное значение температуры срабатывания реле
+  float maxAlaMinTemp, maxAlaMaxTemp,CormaxMaxTemp,CormaxMinTemp; // Минимальное и максимальное значение температуры срабатывания реле
   uint8_t maxAlaMinTempRelay, maxAlaMaxTempRelay; // Какой канал реле и что с ним делать по срабатыванию события (6 младших бит - номер канала реле, 2 старших бита - вкл/выкл/перекл)
   bool maxAlaMinTempTriggered, maxAlaMaxTempTriggered; // Было ли срабатывание реле по порогу температуры?
 
@@ -397,7 +401,109 @@ static String charBufToString(const char* str, uint16_t bufSize) {
 /***
  * ESPWebMQTTRelay class implemenattion
  */
+uint8_t ESPWebMQTTRelay::A_Adaptive(uint8_t event){
+static uint8_t state=0;
+//uint8_t event=0;
+if (isnan(maxMinTemp))maxMinTemp=60;
+if (isnan(maxMaxTemp))maxMaxTemp=61;
+if ((isnan(CormaxMaxTemp)) || (isnan(CormaxMinTemp)))
+{
+        CormaxMinTemp=maxMinTemp - maxAdaptVal/2;
+        CormaxMaxTemp=maxMinTemp + maxAdaptVal/2;
+        _log->print(dateTimeToStr(now));
+        _log->print(F(" Cor min Temp "));
+        _log->print(CormaxMinTemp); 
+        _log->print(F(" Cor max Temp "));               
+        _log->println(CormaxMaxTemp);    
 
+}
+if (!event)
+{
+if ((maxTemperature<maxMinTemp)) event=1;  
+else if ((maxTemperature<CormaxMaxTemp) && (maxTemperature>CormaxMinTemp)) event=2;
+else if ((maxTemperature>maxMaxTemp) && (maxTemperature>CormaxMaxTemp)) event=3;
+else if ((maxTemperature>maxMinTemp) && (maxTemperature<CormaxMinTemp)) event=4;
+else event=5;
+
+}
+
+switch (state)
+  {
+    case 1:
+
+
+        _log->print(dateTimeToStr(now));
+        _log->print(F(" State 1  event "));
+        _log->print(event);
+        _log->println(F(" Max6675 min cor temperature triggered"));   
+        switch (event)
+        {
+          case 1: 
+          case 4:
+          state=3;
+          CormaxMinTemp=maxTemperature - maxAdaptVal/2;
+          CormaxMaxTemp=maxTemperature + maxAdaptVal/2;
+          switchRelay(maxMaxTempRelay & 0x3F, (maxMaxTempRelay >> 6) & 0x01);          
+          break;
+          case 2: state=3;
+          break;
+          case 3: state=2;
+          break;
+          default:state=3;
+          break;
+        }
+        _log->print(dateTimeToStr(now));
+        _log->print(F(" Cor min Temp "));
+        _log->print(CormaxMinTemp); 
+        _log->print(F(" Cor max Temp "));               
+        _log->println(CormaxMaxTemp);            
+    break;
+    case 2:
+        _log->print(dateTimeToStr(now));
+        _log->print(F(" State 2  event "));
+        _log->print(event);
+        _log->println(F(" Max6675  max cor temperature triggered"));        
+
+
+        switch (event)
+        {
+          case 1: state=1;
+          break;
+          case 4:
+          case 2: state=3;
+          break;
+          case 3:
+        CormaxMinTemp=maxTemperature - maxAdaptVal/2;
+        CormaxMaxTemp=maxTemperature + maxAdaptVal/2;
+        switchRelay(maxMinTempRelay & 0x3F, (maxMinTempRelay >> 6) & 0x01);
+          default:state=3;
+          break;
+        }
+        _log->print(dateTimeToStr(now));
+        _log->print(F(" Cor min Temp "));
+        _log->print(CormaxMinTemp); 
+        _log->print(F(" Cor max Temp "));               
+        _log->println(CormaxMaxTemp);      
+
+    break;
+    case 3:
+      switch (event)
+        {
+          case 1:
+          case 4: state=1;
+          break;
+          
+          case 3: state=2;
+          break;
+          default:state=3;
+          break;
+        }
+    break;
+    default:state=3;
+    break;
+  }
+
+}
 void ESPWebMQTTRelay::setupExtra() {
   ESPWebMQTTBase::setupExtra();
 
@@ -693,6 +799,9 @@ void ESPWebMQTTRelay::loopExtra() {
         if (isnan(maxTemperature) || (maxTemperature != v)) {
           maxTemperature = v;
           publishTemperature3();
+          if (maxbtnAdaptive) A_Adaptive(0);
+          else           
+          {
           if (! isnan(maxMinTemp)) {
             if (maxTemperature < maxMinTemp) {
               if (! maxMinTempTriggered) {
@@ -720,6 +829,7 @@ void ESPWebMQTTRelay::loopExtra() {
               }
             } else
               maxMaxTempTriggered = false;
+          }
           }
 //Alarm
           
@@ -929,6 +1039,10 @@ uint16_t ESPWebMQTTRelay::readConfig() {
     offset += sizeof(maxAlaMinTempRelay);
     getEEPROM(offset, maxAlaMaxTempRelay);
     offset += sizeof(maxAlaMaxTempRelay);
+    getEEPROM(offset, maxbtnAdaptive);
+    offset += sizeof(maxbtnAdaptive);
+    getEEPROM(offset, maxAdaptVal);
+    offset += sizeof(maxAdaptVal);        
     
 #endif
 
@@ -1026,6 +1140,10 @@ uint16_t ESPWebMQTTRelay::writeConfig(bool commit) {
   offset += sizeof(maxAlaMinTempRelay);
   putEEPROM(offset, maxAlaMaxTempRelay);
   offset += sizeof(maxAlaMaxTempRelay);
+  putEEPROM(offset, maxbtnAdaptive);
+  offset += sizeof(maxbtnAdaptive);
+  putEEPROM(offset, maxAdaptVal);
+  offset += sizeof(maxAdaptVal);    
 
 #endif
 
@@ -1122,6 +1240,8 @@ void ESPWebMQTTRelay::defaultConfig(uint8_t level) {
     maxAlaMaxTemp = NAN;
     maxAlaMinTempRelay = 0;
     maxAlaMaxTempRelay = 0;
+    maxAdaptVal=NAN;
+    maxbtnAdaptive=0;
 
 #endif
 
@@ -1249,7 +1369,18 @@ bool ESPWebMQTTRelay::setConfigParam(const String& name, const String& value) {
           maxMinTemp = value.toFloat();
         else
           maxMinTemp = NAN;
-      } else if (name.equals(FPSTR(paramMAXMaxTemp))) {
+      }
+       else if (name.equals(FPSTR(paramMAXAdaprive))) {
+        if (value.length())
+          maxAdaptVal = value.toFloat();
+        else
+          maxAdaptVal = NAN;
+
+      }
+      else if (name.startsWith(FPSTR(paramAdaptive)))
+       maxbtnAdaptive = constrain(value.toInt(), 0, 1);
+      
+      else if (name.equals(FPSTR(paramMAXMaxTemp))) {
         if (value.length())
           maxMaxTemp = value.toFloat();
         else
@@ -1387,9 +1518,24 @@ Humidity (DHT): <span id=\"");
 #endif
 #ifdef USEMAX6675
   if ((maxusePins != -1) && (Max6675 != NULL)) {
+    if (maxbtnAdaptive)
+    {
+    page += F("Temp Max (Max6675): <span id=\"");
+    page += FPSTR(jsonMaxCorTemperature);
+    page += F("\">?</span> <sup>o</sup>C<br/>\n");
+
+    }
     page += F("Temperature (Max6675): <span id=\"");
     page += FPSTR(jsonTemperature3);
     page += F("\">?</span> <sup>o</sup>C<br/>\n");
+        if (maxbtnAdaptive)
+    {
+    page += F("Temp Min (Max6675): <span id=\"");
+    page += FPSTR(jsonMinCorTemperature);
+    page += F("\">?</span> <sup>o</sup>C<br/>\n");
+
+    }
+
   }
 #endif
 
@@ -1480,6 +1626,17 @@ String ESPWebMQTTRelay::jsonData() {
   result += FPSTR(jsonTemperature3);
   result += F("\":");
   result += isnan(maxTemperature) ? F("\"?\"") : String(maxTemperature);
+
+  result += F(",\"");
+  result += FPSTR(jsonMaxCorTemperature);
+  result += F("\":");
+  result += isnan(CormaxMaxTemp) ? F("\"?\"") : String(CormaxMaxTemp);
+
+  result += F(",\"");
+  result += FPSTR(jsonMinCorTemperature);
+  result += F("\":");
+  result += isnan(CormaxMinTemp) ? F("\"?\"") : String(CormaxMinTemp);
+
 #endif
 
 #ifdef USELDR
@@ -2775,8 +2932,26 @@ turn\n\
       page += F(" Enable");
     page += F("</option>\n");
   }
-  page += F("</select><br/>\n\
-<label>Minimal temperature:</label></br>\n\
+  page += F("</select><br/>\n");
+
+  page += F("<label>Adaptive value</label></br>\n\
+<input type=\"text\" name=\"");
+  page += FPSTR(paramMAXAdaprive);
+  page += F("\" value=\"");
+
+  if (! isnan(maxAdaptVal))
+    page += String(maxAdaptVal);
+  page += F("\" size=10 maxlength=10>\n");
+
+
+page += F("<input type=\"checkbox\" name=\"");
+    page += FPSTR(paramAdaptive);
+    page += F("\" value=\"1\" ");
+    if (maxbtnAdaptive)
+      page += FPSTR(extraChecked);
+ page += F(">Adaptive </br>\n");
+
+  page += F("<label>Minimal temperature:</label></br>\n\
 <input type=\"text\" name=\"");
   page += FPSTR(paramMAXMinTemp);
   page += F("\" value=\"");
