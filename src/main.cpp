@@ -413,16 +413,34 @@ if ((isnan(CormaxMaxTemp)) || (isnan(CormaxMinTemp)))
         _log->print(dateTimeToStr(now));
         _log->print(F(" Cor min Temp "));
         _log->print(CormaxMinTemp); 
+        _log->print(F(" Temp "));
+        _log->print(maxTemperature);  
         _log->print(F(" Cor max Temp "));               
         _log->println(CormaxMaxTemp);    
 
 }
+if ((CormaxMaxTemp<maxMinTemp) && (CormaxMinTemp<maxMinTemp))
+{
+         CormaxMinTemp=maxMinTemp - maxAdaptVal/2;
+        CormaxMaxTemp=maxMinTemp + maxAdaptVal/2;
+        _log->print(dateTimeToStr(now));
+        _log->print(F(" Cor min Temp "));
+        _log->print(CormaxMinTemp); 
+        _log->print(F(" Temp "));
+        _log->print(maxTemperature);  
+        _log->print(F(" Cor max Temp "));               
+        _log->println(CormaxMaxTemp);  
+}
+
+
 if (!event)
 {
 if ((maxTemperature<maxMinTemp)) event=1;  
-else if ((maxTemperature<CormaxMaxTemp) && (maxTemperature>CormaxMinTemp)) event=2;
-else if ((maxTemperature>maxMaxTemp) && (maxTemperature>CormaxMaxTemp)) event=3;
-else if ((maxTemperature>maxMinTemp) && (maxTemperature<CormaxMinTemp)) event=4;
+else if ((maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) && maxTemperature<maxMaxTemp) event=6;
+else if ((maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) && maxTemperature>maxMaxTemp) event=2;
+else if ((maxTemperature>=maxMaxTemp) && (maxTemperature>CormaxMaxTemp)) event=3;
+else if ((maxTemperature>=maxMinTemp) && (maxTemperature<CormaxMinTemp)) event=4;
+else if ((maxTemperature<maxMinTemp) && (maxTemperature>CormaxMaxTemp)) event=5;
 else event=5;
 
 }
@@ -433,17 +451,19 @@ switch (state)
 
 
         _log->print(dateTimeToStr(now));
-        _log->print(F(" State 1  event "));
+        _log->print(F(" State 1 event "));
         _log->print(event);
-        _log->println(F(" Max6675 min cor temperature triggered"));   
+        _log->println(F(" Max6675 min triggered"));   
         switch (event)
         {
           case 1: 
           case 4:
+          case 6:
+          case 5:
           state=3;
           CormaxMinTemp=maxTemperature - maxAdaptVal/2;
           CormaxMaxTemp=maxTemperature + maxAdaptVal/2;
-          switchRelay(maxMaxTempRelay & 0x3F, (maxMaxTempRelay >> 6) & 0x01);          
+          switchRelay(maxMinTempRelay & 0x3F, (maxMinTempRelay >> 6) & 0x01);          
           break;
           case 2: state=3;
           break;
@@ -455,14 +475,16 @@ switch (state)
         _log->print(dateTimeToStr(now));
         _log->print(F(" Cor min Temp "));
         _log->print(CormaxMinTemp); 
+        _log->print(F(" Temp "));
+        _log->print(maxTemperature);         
         _log->print(F(" Cor max Temp "));               
         _log->println(CormaxMaxTemp);            
     break;
     case 2:
         _log->print(dateTimeToStr(now));
-        _log->print(F(" State 2  event "));
+        _log->print(F(" State 2 event "));
         _log->print(event);
-        _log->println(F(" Max6675  max cor temperature triggered"));        
+        _log->println(F(" Max6675 max triggered"));        
 
 
         switch (event)
@@ -475,13 +497,15 @@ switch (state)
           case 3:
         CormaxMinTemp=maxTemperature - maxAdaptVal/2;
         CormaxMaxTemp=maxTemperature + maxAdaptVal/2;
-        switchRelay(maxMinTempRelay & 0x3F, (maxMinTempRelay >> 6) & 0x01);
+        switchRelay(maxMaxTempRelay & 0x3F, (maxMaxTempRelay >> 6) & 0x01);
           default:state=3;
           break;
         }
         _log->print(dateTimeToStr(now));
         _log->print(F(" Cor min Temp "));
         _log->print(CormaxMinTemp); 
+        _log->print(F(" Temp "));
+        _log->print(maxTemperature);  
         _log->print(F(" Cor max Temp "));               
         _log->println(CormaxMaxTemp);      
 
@@ -490,6 +514,7 @@ switch (state)
       switch (event)
         {
           case 1:
+          case 6:
           case 4: state=1;
           break;
           
@@ -577,6 +602,8 @@ void ESPWebMQTTRelay::setupExtra() {
   maxMaxTempTriggered = false;
   maxAlaMinTempTriggered = false;
   maxAlaMaxTempTriggered = false;
+  CormaxMinTemp=NAN;
+  CormaxMaxTemp=NAN;
 
 #endif
 
@@ -1622,15 +1649,16 @@ String ESPWebMQTTRelay::jsonData() {
   result += isnan(dsTemperature) ? F("\"?\"") : String(dsTemperature);
 #endif
 #ifdef USEMAX6675
-  result += F(",\"");
-  result += FPSTR(jsonTemperature3);
-  result += F("\":");
-  result += isnan(maxTemperature) ? F("\"?\"") : String(maxTemperature);
 
   result += F(",\"");
   result += FPSTR(jsonMaxCorTemperature);
   result += F("\":");
   result += isnan(CormaxMaxTemp) ? F("\"?\"") : String(CormaxMaxTemp);
+
+  result += F(",\"");
+  result += FPSTR(jsonTemperature3);
+  result += F("\":");
+  result += isnan(maxTemperature) ? F("\"?\"") : String(maxTemperature);
 
   result += F(",\"");
   result += FPSTR(jsonMinCorTemperature);
@@ -1784,6 +1812,16 @@ else\n");
     script += FPSTR(jsonTemperature3);
     script += F("').innerHTML = data.");
     script += FPSTR(jsonTemperature3);
+    script += F(";\n");
+    script += FPSTR(getElementById);
+    script += FPSTR(jsonMaxCorTemperature);
+    script += F("').innerHTML = data.");
+    script += FPSTR(jsonMaxCorTemperature);
+    script += F(";\n");
+    script += FPSTR(getElementById);
+    script += FPSTR(jsonMinCorTemperature);
+    script += F("').innerHTML = data.");
+    script += FPSTR(jsonMinCorTemperature);
     script += F(";\n");
   }
 #endif
