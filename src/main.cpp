@@ -1398,13 +1398,17 @@ bool ESPWebMQTTRelay::setConfigParam(const String& name, const String& value) {
           maxMinTemp = NAN;
       }
        else if (name.equals(FPSTR(paramMAXAdaprive))) {
+         maxbtnAdaptive=0;// HTML unchecked checkbox workaround
+
         if (value.length())
+          
+
           maxAdaptVal = value.toFloat();
         else
           maxAdaptVal = NAN;
 
       }
-      else if (name.startsWith(FPSTR(paramAdaptive)))
+      else if (name.equals(FPSTR(paramAdaptive)))
        maxbtnAdaptive = constrain(value.toInt(), 0, 1);
       
       else if (name.equals(FPSTR(paramMAXMaxTemp))) {
@@ -1511,11 +1515,11 @@ void ESPWebMQTTRelay::setupHttpServer() {
 }
 
 void ESPWebMQTTRelay::handleRootPage() {
-  String page = ESPWebBase::webPageStart(F("ESP Relay v2"));
+  String page = ESPWebBase::webPageStart(F("ESP Relay v3.1"));
   page += ESPWebBase::webPageStyle(pathIndexCss, true);
   page += ESPWebBase::webPageScript(pathIndexJs, true);
   page += ESPWebBase::webPageBody();
-  page += F("<h3>ESP Relay v2</h3>\n\
+  page += F("<h3>ESP Relay v3.1</h3>\n\
 <p>\n\
 MQTT broker: <span id=\"");
   page += FPSTR(jsonMQTTConnected);
@@ -1735,6 +1739,24 @@ var request = getXmlHttpRequest();\n\
 request.open('GET', url, false);\n\
 request.send(null);\n\
 }\n\
+function uptimeToStr(uptime) {\n\
+var tm, uptimestr = '';\n\
+if (uptime >= 86400)\n\
+uptimestr = parseInt(uptime / 86400) + ' day(s) ';\n\
+tm = parseInt(uptime % 86400 / 3600);\n\
+if (tm < 10)\n\
+uptimestr += '0';\n\
+uptimestr += tm + ':';\n\
+tm = parseInt(uptime % 3600 / 60);\n\
+if (tm < 10)\n\
+uptimestr += '0';\n\
+uptimestr += tm + ':';\n\
+tm = parseInt(uptime % 60);\n\
+if (tm < 10)\n\
+uptimestr += '0';\n\
+uptimestr += tm;\n\
+return uptimestr;\n\
+}\n\
 function refreshData() {\n\
 var request = getXmlHttpRequest();\n\
 request.open('GET', '");
@@ -1755,9 +1777,9 @@ var data = JSON.parse(request.responseText);\n");
   script += F(";\n");
   script += FPSTR(getElementById);
   script += FPSTR(jsonUptime);
-  script += F("').innerHTML = data.");
+  script += F("').innerHTML = uptimeToStr(data.");
   script += FPSTR(jsonUptime);
-  script += F(";\n");
+  script += F(");\n");
   for (int8_t id = 0; id < maxRelays; id++) {
     script += FPSTR(getElementById);
     script += FPSTR(jsonRelay);
