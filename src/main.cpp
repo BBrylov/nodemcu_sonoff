@@ -411,7 +411,7 @@ if ((isnan(CormaxMaxTemp)) || (isnan(CormaxMinTemp)))
         CormaxMinTemp=maxMinTemp - maxAdaptVal/2;
         CormaxMaxTemp=maxMinTemp + maxAdaptVal/2;
         _log->print(dateTimeToStr(now));
-        _log->print(F(" Cor min Temp "));
+        _log->print(F(" Nan Cor min Temp "));
         _log->print(CormaxMinTemp); 
         _log->print(F(" Temp "));
         _log->print(maxTemperature);  
@@ -424,7 +424,7 @@ if ((CormaxMaxTemp<maxMinTemp) && (CormaxMinTemp<maxMinTemp))
          CormaxMinTemp=maxMinTemp - maxAdaptVal/2;
         CormaxMaxTemp=maxMinTemp + maxAdaptVal/2;
         _log->print(dateTimeToStr(now));
-        _log->print(F(" Cor min Temp "));
+        _log->print(F("Min Cor min Temp "));
         _log->print(CormaxMinTemp); 
         _log->print(F(" Temp "));
         _log->print(maxTemperature);  
@@ -435,7 +435,8 @@ if ((CormaxMaxTemp<maxMinTemp) && (CormaxMinTemp<maxMinTemp))
 
 if (!event)
 {
-if ((maxTemperature<maxMinTemp)) event=1;  
+if ((maxTemperature<maxMinTemp) && (maxTemperature>=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) ) event=1;  
+else if ((maxTemperature<maxMinTemp) && (maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) ) event=5;
 else if ((maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) && maxTemperature<maxMaxTemp) event=6;
 else if ((maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) && maxTemperature>maxMaxTemp) event=2;
 else if ((maxTemperature>=maxMaxTemp) && (maxTemperature>CormaxMaxTemp)) event=3;
@@ -824,7 +825,7 @@ void ESPWebMQTTRelay::loopExtra() {
       v = Max6675->readCelsius();
       if (! isnan(v) && (v >= -50.0) && (v <= 150.0)) {
         if (isnan(maxTemperature) || (maxTemperature != v)) {
-          maxTemperature = v;
+          maxTemperature = v+10;
           publishTemperature3();
           if (maxbtnAdaptive) A_Adaptive(0);
           else           
@@ -1515,11 +1516,11 @@ void ESPWebMQTTRelay::setupHttpServer() {
 }
 
 void ESPWebMQTTRelay::handleRootPage() {
-  String page = ESPWebBase::webPageStart(F("ESP Relay v3.1"));
+  String page = ESPWebBase::webPageStart(F("ESP Relay v3.1.1"));
   page += ESPWebBase::webPageStyle(pathIndexCss, true);
   page += ESPWebBase::webPageScript(pathIndexJs, true);
   page += ESPWebBase::webPageBody();
-  page += F("<h3>ESP Relay v3.1</h3>\n\
+  page += F("<h3>ESP Relay v3.1.1</h3>\n\
 <p>\n\
 MQTT broker: <span id=\"");
   page += FPSTR(jsonMQTTConnected);
