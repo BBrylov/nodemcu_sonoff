@@ -436,6 +436,7 @@ if ((CormaxMaxTemp<maxMinTemp) && (CormaxMinTemp<maxMinTemp))
 if (!event)
 {
 if ((maxTemperature<maxMinTemp) && (maxTemperature>=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) ) event=1;  
+else if ((maxTemperature>92) && (maxTemperature>CormaxMaxTemp)) event=7; // исправть параметр максимальной температуры
 else if ((maxTemperature<maxMinTemp) && (maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) ) event=5;
 else if ((maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) && maxTemperature<maxMaxTemp) event=6;
 else if ((maxTemperature<=CormaxMaxTemp) && (maxTemperature>=CormaxMinTemp) && maxTemperature>maxMaxTemp) event=2;
@@ -448,7 +449,7 @@ else event=5;
 
 switch (state)
   {
-    case 1:
+    case 1: //нагрев
 
 
         _log->print(dateTimeToStr(now));
@@ -481,7 +482,7 @@ switch (state)
         _log->print(F(" Cor max Temp "));               
         _log->println(CormaxMaxTemp);            
     break;
-    case 2:
+    case 2:// сброс
         _log->print(dateTimeToStr(now));
         _log->print(F(" State 2 event "));
         _log->print(event);
@@ -511,7 +512,7 @@ switch (state)
         _log->println(CormaxMaxTemp);      
 
     break;
-    case 3:
+    case 3: // ничего не делаем
       switch (event)
         {
           case 1:
@@ -1516,11 +1517,11 @@ void ESPWebMQTTRelay::setupHttpServer() {
 }
 
 void ESPWebMQTTRelay::handleRootPage() {
-  String page = ESPWebBase::webPageStart(F("ESP Relay v3.1.1"));
+  String page = ESPWebBase::webPageStart(F("ESP Relay v3.1.2"));
   page += ESPWebBase::webPageStyle(pathIndexCss, true);
   page += ESPWebBase::webPageScript(pathIndexJs, true);
   page += ESPWebBase::webPageBody();
-  page += F("<h3>ESP Relay v3.1.1</h3>\n\
+  page += F("<h3>ESP Relay v3.1.2</h3>\n\
 <p>\n\
 MQTT broker: <span id=\"");
   page += FPSTR(jsonMQTTConnected);
